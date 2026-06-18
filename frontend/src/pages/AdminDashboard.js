@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { statsAPI } from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Search, Package, CheckCircle, Trash2, Users, AlertCircle } from 'lucide-react';
+import { Search, Package, CheckCircle, Trash2, Users, AlertCircle, Shield, XCircle } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -64,6 +64,34 @@ const AdminDashboard = () => {
       icon: Trash2, 
       color: 'bg-red-500',
       bgColor: 'bg-red-50'
+    },
+    { 
+      label: 'Pending Verifications', 
+      value: stats?.pending_verifications || 0, 
+      icon: Shield, 
+      color: 'bg-yellow-500',
+      bgColor: 'bg-yellow-50'
+    },
+    { 
+      label: 'Approved Matches', 
+      value: stats?.approved_matches || 0, 
+      icon: CheckCircle, 
+      color: 'bg-emerald-500',
+      bgColor: 'bg-emerald-50'
+    },
+    { 
+      label: 'Rejected Matches', 
+      value: stats?.rejected_matches || 0, 
+      icon: XCircle, 
+      color: 'bg-red-500',
+      bgColor: 'bg-red-50'
+    },
+    { 
+      label: 'Completed Returns', 
+      value: stats?.completed_returns || 0, 
+      icon: Package, 
+      color: 'bg-slate-500',
+      bgColor: 'bg-slate-50'
     }
   ];
 

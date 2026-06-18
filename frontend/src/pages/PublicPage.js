@@ -65,8 +65,8 @@ const PublicPage = () => {
               Campus Lost & Found
             </h1>
             <p className="text-lg text-slate-300 mb-8 animate-fade-in">
-              Browse recently found items on campus. If you've lost something, 
-              login to report it or claim a found item.
+              Browse recently lost and found items on campus. If you've lost or found something, 
+              login to report it or claim an item.
             </p>
             
             {/* Search Bar */}
@@ -74,7 +74,7 @@ const PublicPage = () => {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <Input
                 type="text"
-                placeholder="Search found items by description or location..."
+                placeholder="Search lost and found items by description or location..."
                 className="pl-12 pr-4 py-6 text-base bg-white text-slate-900 border-0 rounded-lg shadow-lg"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -90,10 +90,10 @@ const PublicPage = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="font-outfit text-2xl font-bold text-slate-900">
-              Recently Found Items
+              Recent Lost & Found Items
             </h2>
             <p className="text-slate-500 mt-1">
-              {filteredItems.length} items available for claim
+              {filteredItems.length} items listed
             </p>
           </div>
           <Button 
@@ -101,7 +101,7 @@ const PublicPage = () => {
             className="bg-slate-900 hover:bg-slate-800"
             data-testid="login-to-claim-btn"
           >
-            Login to Claim
+            Login to Report / Claim
           </Button>
         </div>
 
@@ -135,8 +135,8 @@ const PublicPage = () => {
                       e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400';
                     }}
                   />
-                  <Badge className="absolute top-3 left-3 status-found">
-                    FOUND
+                  <Badge className={`absolute top-3 left-3 ${item.item_type === 'lost' ? 'status-lost' : 'status-found'}`}>
+                    {item.item_type ? item.item_type.toUpperCase() : 'FOUND'}
                   </Badge>
                 </div>
                 <div className="p-4">

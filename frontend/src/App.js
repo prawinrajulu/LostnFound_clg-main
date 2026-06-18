@@ -22,11 +22,14 @@ import AdminLostItems from "./pages/AdminLostItems";
 import AdminFoundItems from "./pages/AdminFoundItems";
 import AdminAIMatches from "./pages/AdminAIMatches";
 import AdminClaims from "./pages/AdminClaims";
-import AdminStudents from "./pages/AdminStudents";
+import AdminStudentFolders from "./pages/AdminStudentFolders";
+import AdminStudentsLegacy from "./pages/AdminStudentsLegacy";
 import AdminMessages from "./pages/AdminMessages";
 import AdminDeletedItems from "./pages/AdminDeletedItems";
 import AdminManageAdmins from "./pages/AdminManageAdmins";
 import AdminSettings from "./pages/AdminSettings";
+import AdminVerificationQueue from "./pages/AdminVerificationQueue";
+import AdminVerificationSession from "./pages/AdminVerificationSession";
 
 // Protected Route Components
 const StudentRoute = ({ children }) => {
@@ -83,6 +86,10 @@ const SuperAdminRoute = ({ children }) => {
   return children;
 };
 
+const AdminStudents = process.env.REACT_APP_STUDENT_VIEW_MODE === 'legacy'
+  ? AdminStudentsLegacy
+  : AdminStudentFolders;
+
 function AppRoutes() {
   const { isAuthenticated, isStudent, isAdmin } = useAuth();
   
@@ -134,6 +141,8 @@ function AppRoutes() {
         <Route path="lost-items" element={<AdminLostItems />} />
         <Route path="found-items" element={<AdminFoundItems />} />
         <Route path="ai-matches" element={<AdminAIMatches />} />
+        <Route path="verification-queue" element={<AdminVerificationQueue />} />
+        <Route path="verification-session/:matchId" element={<AdminVerificationSession />} />
         <Route path="claims" element={<AdminClaims />} />
         <Route path="students" element={<AdminStudents />} />
         <Route path="messages" element={<AdminMessages />} />

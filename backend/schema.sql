@@ -154,3 +154,59 @@ CREATE POLICY "service_role_all_items"      ON items      FOR ALL USING (true) W
 CREATE POLICY "service_role_all_claims"     ON claims     FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all_messages"   ON messages   FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all_audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
+
+
+-- =====================================================================
+-- NEW TABLES FOR MATCH VERIFICATION FLOW
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS matches (
+    id               TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    lost_item_id     TEXT        NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    found_item_id    TEXT        NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    confidence_score INTEGER     NOT NULL,
+    status           TEXT        NOT NULL DEFAULT 'pending'
+                                 CHECK (status IN ('pending', 'student_notified', 'verification_started', 'qa_completed', 'admin_review', 'approved', 'rejected', 'completed')),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS verification_questions (
+    id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    match_id    TEXT        NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    question    TEXT        NOT NULL,
+    created_by  TEXT        NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS verification_answers (
+    id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    question_id TEXT        NOT NULL REFERENCES verification_questions(id) ON DELETE CASCADE,
+    answer      TEXT        NOT NULL,
+    answered_by TEXT        NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    answered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS verification_sessions (
+    id                 TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    match_id           TEXT        NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    verification_status TEXT       NOT NULL DEFAULT 'pending'
+                                   CHECK (verification_status IN ('pending', 'under_review', 'completed')),
+    admin_notes        TEXT        NOT NULL DEFAULT '',
+    handover_confirmed BOOLEAN     NOT NULL DEFAULT FALSE,
+    completed_at       TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_matches_lost_item ON matches(lost_item_id);
+CREATE INDEX IF NOT EXISTS idx_matches_found_item ON matches(found_item_id);
+CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
+
+ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE verification_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE verification_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE verification_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_all_matches" ON matches FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_all_vq" ON verification_questions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_all_va" ON verification_answers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_all_vs" ON verification_sessions FOR ALL USING (true) WITH CHECK (true);
+

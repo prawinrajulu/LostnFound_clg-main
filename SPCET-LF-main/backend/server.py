@@ -235,6 +235,15 @@ async def change_admin_password(data: AdminPasswordChange, current_user: dict = 
 
 # ===================== STUDENT MANAGEMENT =====================
 
+def clean_excel_str(val):
+    if val is None or pd.isna(val):
+        return ""
+    val_str = str(val).strip()
+    if val_str.endswith(".0"):
+        val_str = val_str[:-2]
+    return val_str
+
+
 @api_router.post("/students/upload-excel")
 async def upload_students_excel(file: UploadFile = File(...), current_user: dict = Depends(require_admin)):
     if not file.filename.endswith(('.xlsx', '.xls')):
@@ -253,7 +262,10 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
     errors = []
     
     for idx, row in df.iterrows():
-        roll_number = str(row["Roll Number"]).strip()
+        roll_number = clean_excel_str(row["Roll Number"])
+        if not roll_number:
+            continue
+            
         existing = await db.students.find_one({"roll_number": roll_number})
         if existing:
             skipped += 1
@@ -270,11 +282,11 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
                 "id": str(uuid.uuid4()),
                 "roll_number": roll_number,
                 "full_name": str(row["Full Name"]).strip(),
-                "department": str(row["Department"]).strip(),
-                "year": str(row["Year"]).strip(),
+                "department": clean_excel_str(row["Department"]),
+                "year": clean_excel_str(row["Year"]),
                 "dob": dob_str,
-                "email": str(row["Email"]).strip(),
-                "phone_number": str(row["Phone Number"]).strip(),
+                "email": clean_excel_str(row["Email"]),
+                "phone_number": clean_excel_str(row["Phone Number"]),
                 "profile_picture": None,
                 "admin_notes": [],
                 "created_at": datetime.now(timezone.utc).isoformat()
@@ -776,9 +788,66 @@ async def mark_all_read(current_user: dict = Depends(get_current_user)):
 
 # ===================== AI MATCHING =====================
 
+def fallback_match_items(lost_items, found_items):
+    matches = []
+    import re
+    def get_words(text):
+        if not text:
+            return set()
+        return set(re.findall(r'\b\w{3,}\b', text.lower()))
+
+    for lost in lost_items:
+        lost_words = get_words(lost.get("description", ""))
+        lost_loc = (lost.get("location") or "").lower().strip()
+        
+        for found in found_items:
+            found_words = get_words(found.get("description", ""))
+            found_loc = (found.get("location") or "").lower().strip()
+            
+            common_words = lost_words.intersection(found_words)
+            
+            word_score = 0
+            union_len = len(lost_words.union(found_words))
+            if union_len > 0:
+                word_score = (len(common_words) / union_len) * 100
+                
+            loc_score = 0
+            if lost_loc and found_loc:
+                if lost_loc == found_loc:
+                    loc_score = 100
+                elif lost_loc in found_loc or found_loc in lost_loc:
+                    loc_score = 70
+                    
+            confidence = int(0.6 * word_score + 0.4 * loc_score)
+            
+            if len(common_words) >= 1 or (lost_loc and lost_loc == found_loc):
+                if confidence < 50:
+                    confidence = 50 + len(common_words) * 5
+                
+                confidence = min(95, confidence)
+                
+                reason_parts = []
+                if common_words:
+                    reason_parts.append(f"Matching keywords: {', '.join(list(common_words)[:3])}")
+                if lost_loc == found_loc and lost_loc:
+                    reason_parts.append("Same location")
+                elif loc_score > 0:
+                    reason_parts.append("Similar location area")
+                    
+                reason = " & ".join(reason_parts) if reason_parts else "Overlap in item characteristics"
+                
+                matches.append({
+                    "lost_id": lost["id"],
+                    "found_id": found["id"],
+                    "confidence": confidence,
+                    "reason": reason
+                })
+    return matches
+
+
 @api_router.get("/ai/matches")
 async def get_ai_matches(current_user: dict = Depends(require_admin)):
-    """Get AI-suggested matches between lost and found items"""
+    """Get AI-suggested matches between lost and found items (with local keyword fallback)."""
     lost_items = await db.items.find(
         {"item_type": "lost", "is_deleted": False, "status": "active"},
         {"_id": 0}
@@ -793,31 +862,28 @@ async def get_ai_matches(current_user: dict = Depends(require_admin)):
         return {"matches": [], "message": "Not enough items to match"}
     
     matches = []
-    
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
-        if not api_key:
-            return {"matches": [], "message": "AI service not configured"}
-        
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"matching_{datetime.now().timestamp()}",
-            system_message="""You are an AI assistant helping match lost items with found items in a campus lost and found system.
-            Compare items based on description, location, date, and time.
-            Return ONLY valid JSON array with matches. Each match should have:
-            - lost_id: ID of the lost item
-            - found_id: ID of the found item
-            - confidence: Score from 0 to 100
-            - reason: Brief explanation of why they might match
-            Only include matches with confidence >= 50."""
-        ).with_model("openai", "gpt-5.2")
-        
-        lost_summary = [{"id": i["id"], "desc": i["description"], "loc": i["location"], "date": i["date"]} for i in lost_items[:20]]
-        found_summary = [{"id": i["id"], "desc": i["description"], "loc": i["location"], "date": i["date"]} for i in found_items[:20]]
-        
-        prompt = f"""Match these lost items with found items:
+        api_key = os.environ.get("EMERGENT_LLM_KEY") or os.environ.get("OPENAI_API_KEY")
+        matches_data = []
+        llm_success = False
+
+        if api_key:
+            try:
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=api_key)
+
+                lost_summary = [
+                    {"id": i["id"], "desc": i["description"], "loc": i["location"],
+                     "date": i.get("date", "")}
+                    for i in lost_items[:20]
+                ]
+                found_summary = [
+                    {"id": i["id"], "desc": i["description"], "loc": i["location"],
+                     "date": i.get("date", "")}
+                    for i in found_items[:20]
+                ]
+
+                prompt = f"""Match these lost items with found items:
 
 LOST ITEMS:
 {json.dumps(lost_summary, indent=2)}
@@ -826,38 +892,66 @@ FOUND ITEMS:
 {json.dumps(found_summary, indent=2)}
 
 Return ONLY a JSON array of matches with confidence scores."""
-        
-        response = await chat.send_message(UserMessage(text=prompt))
-        
-        # Parse response
-        try:
-            # Try to extract JSON from response
-            import re
-            json_match = re.search(r'\[.*\]', response, re.DOTALL)
-            if json_match:
-                matches_data = json.loads(json_match.group())
-                for match in matches_data:
-                    if match.get("confidence", 0) >= 50:
-                        lost_item = next((i for i in lost_items if i["id"] == match["lost_id"]), None)
-                        found_item = next((i for i in found_items if i["id"] == match["found_id"]), None)
-                        if lost_item and found_item:
-                            # Get student info
-                            lost_student = await db.students.find_one({"id": lost_item["student_id"]}, {"_id": 0, "full_name": 1, "roll_number": 1})
-                            found_student = await db.students.find_one({"id": found_item["student_id"]}, {"_id": 0, "full_name": 1, "roll_number": 1})
-                            
-                            matches.append({
-                                "lost_item": {**lost_item, "student": lost_student},
-                                "found_item": {**found_item, "student": found_student},
-                                "confidence": match.get("confidence", 0),
-                                "reason": match.get("reason", "")
-                            })
-        except json.JSONDecodeError:
-            logging.error(f"Failed to parse AI response: {response}")
-    
+
+                response_obj = await client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an AI assistant helping match lost items with found items in a campus "
+                                "lost and found system.\nCompare items based on description, location, date, and time.\n"
+                                "Return ONLY valid JSON array with matches. Each match should have:\n"
+                                "- lost_id: ID of the lost item\n"
+                                "- found_id: ID of the found item\n"
+                                "- confidence: Score from 0 to 100\n"
+                                "- reason: Brief explanation of why they might match\n"
+                                "Only include matches with confidence >= 50."
+                            )
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    timeout=15.0
+                )
+                response = response_obj.choices[0].message.content or ""
+
+                import re
+                json_match = re.search(r'\[.*\]', response, re.DOTALL)
+                if json_match:
+                    matches_data = json.loads(json_match.group())
+                    llm_success = True
+            except Exception as llm_err:
+                logging.warning(f"AI LLM matching failed, falling back to local rule-based match: {str(llm_err)}")
+
+        if not llm_success:
+            matches_data = fallback_match_items(lost_items, found_items)
+
+        # Hydrate matching data with MongoDB student details
+        for match in matches_data:
+            if match.get("confidence", 0) >= 50:
+                lost_item = next((i for i in lost_items if i["id"] == match["lost_id"]), None)
+                found_item = next((i for i in found_items if i["id"] == match["found_id"]), None)
+                if lost_item and found_item:
+                    lost_student = await db.students.find_one(
+                        {"id": lost_item["student_id"]},
+                        {"_id": 0, "full_name": 1, "roll_number": 1}
+                    )
+                    found_student = await db.students.find_one(
+                        {"id": found_item["student_id"]},
+                        {"_id": 0, "full_name": 1, "roll_number": 1}
+                    )
+                    matches.append({
+                        "lost_item": {**lost_item, "student": lost_student},
+                        "found_item": {**found_item, "student": found_student},
+                        "confidence": match.get("confidence", 0),
+                        "reason": match.get("reason", "")
+                    })
     except Exception as e:
         logging.error(f"AI matching error: {str(e)}")
-        return {"matches": [], "message": f"AI matching temporarily unavailable"}
-    
+        return {"matches": [], "message": "AI matching temporarily unavailable"}
+
+
+
     # Sort by confidence
     matches.sort(key=lambda x: x["confidence"], reverse=True)
     return {"matches": matches}

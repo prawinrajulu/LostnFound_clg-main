@@ -11,7 +11,8 @@ import {
   LogOut,
   Sparkles,
   UserCog,
-  Building2
+  Building2,
+  Shield
 } from 'lucide-react';
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/admin/lost-items', icon: Search, label: 'Lost Items' },
   { to: '/admin/found-items', icon: Package, label: 'Found Items' },
   { to: '/admin/ai-matches', icon: Sparkles, label: 'AI Matches' },
+  { to: '/admin/verification-queue', icon: Shield, label: 'Verification Queue' },
   { to: '/admin/claims', icon: Package, label: 'Claims' },
   { to: '/admin/students', icon: Users, label: 'Students' },
   { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },

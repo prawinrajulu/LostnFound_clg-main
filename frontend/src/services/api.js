@@ -83,14 +83,21 @@ export const messagesAPI = {
 export const studentsAPI = {
   getStudents: () => api.get('/students'),
   getStudent: (id) => api.get(`/students/${id}`),
-  uploadExcel: (file) => {
+  uploadExcel: (file, department, year) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (department) formData.append('department', department);
+    if (year) formData.append('year', year);
     return api.post('/students/upload-excel', formData);
   },
   addNote: (studentId, note) => 
     api.post(`/students/${studentId}/admin-note`, { student_id: studentId, note }),
-  deleteStudent: (id) => api.delete(`/students/${id}`)
+  deleteStudent: (id) => api.delete(`/students/${id}`),
+  getFolderTree: () => api.get('/students/folder-tree'),
+  getByFolder: (department, year) => api.get('/students/by-folder', { params: { department, year } }),
+  moveStudent: (id, department, year) => api.put(`/students/${id}/move`, { department, year }),
+  bulkMove: (studentIds, department, year) => api.post('/students/bulk-move', { student_ids: studentIds, department, year }),
+  bulkDelete: (studentIds) => api.post('/students/bulk-delete', { student_ids: studentIds })
 };
 
 // Admin APIs
@@ -110,5 +117,20 @@ export const statsAPI = {
 
 // AI APIs
 export const aiAPI = {
-  getMatches: () => api.get('/ai/matches')
+  getMatches: () => api.get('/ai/matches'),
+  initiateVerification: (lostItemId, foundItemId, question) =>
+    api.post('/ai/matches/initiate-verification', { lost_item_id: lostItemId, found_item_id: foundItemId, question })
 };
+
+// Verification APIs
+export const verificationAPI = {
+  getQueue: () => api.get('/verification/queue'),
+  getSession: (matchId) => api.get(`/verification/session/${matchId}`),
+  addQuestion: (matchId, question) => api.post(`/verification/session/${matchId}/question`, { question }),
+  submitAnswer: (matchId, questionId, answer) => api.post(`/verification/session/${matchId}/answer`, { question_id: questionId, answer }),
+  updateNotes: (matchId, notes) => api.post(`/verification/session/${matchId}/notes`, { notes }),
+  makeDecision: (matchId, status) => api.post(`/verification/session/${matchId}/decision`, { status }),
+  completeVerification: (matchId, handoverConfirmed) => api.post(`/verification/session/${matchId}/complete`, { handover_confirmed: handoverConfirmed }),
+  getStudentVerifications: () => api.get('/student/verifications')
+};
+

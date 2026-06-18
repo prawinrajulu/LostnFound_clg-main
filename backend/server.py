@@ -14,6 +14,8 @@ import uuid
 from datetime import datetime, timezone, date
 import jwt
 import bcrypt
+
+
 import shutil
 import json
 import pandas as pd
@@ -227,6 +229,41 @@ class ClaimDecision(BaseModel):
     status: str  # "approved" or "rejected"
     notes: Optional[str] = ""
 
+class StudentMove(BaseModel):
+    department: str
+    year: str
+
+class StudentBulkMove(BaseModel):
+    student_ids: List[str]
+    department: str
+    year: str
+
+class StudentBulkDelete(BaseModel):
+    student_ids: List[str]
+
+class InitiateVerificationRequest(BaseModel):
+    lost_item_id: str
+    found_item_id: str
+    question: str
+
+class VerificationQuestionCreate(BaseModel):
+    question: str
+
+class VerificationAnswerCreate(BaseModel):
+    question_id: str
+    answer: str
+
+class VerificationNotesUpdate(BaseModel):
+    notes: str
+
+class VerificationDecision(BaseModel):
+    status: str  # "approved" or "rejected"
+
+class VerificationComplete(BaseModel):
+    handover_confirmed: bool
+
+
+
 # ===================== HELPER FUNCTIONS =====================
 
 def create_token(user_id: str, role: str, extra_data: dict = None) -> str:
@@ -317,27 +354,6 @@ async def startup_event():
     except Exception as exc:
         logging.error(f"Startup error (default admin): {exc}")
 
-# ===================== TEMP SETUP (remove after use) =====================
-
-@api_router.post("/setup/create-admin")
-async def setup_create_admin():
-    """Temporary one-time endpoint to seed the default admin. Remove after use."""
-    existing = await sb_find_one("admins", {"username": "Admin"})
-    hashed = hash_password("admin@123")
-    if existing:
-        await sb_update("admins", {"username": "Admin"}, {"password": hashed})
-        return {"message": "Admin password reset", "username": "Admin", "password": "admin@123"}
-    new_admin = {
-        "id": str(uuid.uuid4()),
-        "username": "Admin",
-        "password": hashed,
-        "full_name": "Administrator",
-        "role": "admin",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await sb_insert("admins", new_admin)
-    return {"message": "Admin created", "username": "Admin", "password": "admin@123"}
-
 # ===================== AUTH ROUTES =====================
 
 @api_router.post("/auth/student/login")
@@ -416,15 +432,36 @@ async def change_admin_password(data: AdminPasswordChange, current_user: dict = 
 
 # ===================== STUDENT MANAGEMENT =====================
 
+def clean_excel_str(val):
+    if val is None or pd.isna(val):
+        return ""
+    val_str = str(val).strip()
+    if val_str.endswith(".0"):
+        val_str = val_str[:-2]
+    return val_str
+
+
 @api_router.post("/students/upload-excel")
-async def upload_students_excel(file: UploadFile = File(...), current_user: dict = Depends(require_admin)):
+async def upload_students_excel(
+    file: UploadFile = File(...),
+    department: Optional[str] = Form(None),
+    year: Optional[str] = Form(None),
+    current_user: dict = Depends(require_admin)
+):
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only Excel files are allowed")
 
     content = await file.read()
     df = pd.read_excel(BytesIO(content))
 
-    required_columns = ["Roll Number", "Full Name", "Department", "Year", "DOB", "Email", "Phone Number"]
+    # If department and year are provided via form, they are not strictly required in the Excel file
+    base_required = ["Roll Number", "Full Name", "DOB", "Email", "Phone Number"]
+    required_columns = list(base_required)
+    if not department:
+        required_columns.append("Department")
+    if not year:
+        required_columns.append("Year")
+
     df_columns_lower = [col.strip().lower() for col in df.columns]
 
     missing = [col for col in required_columns if col.lower() not in df_columns_lower]
@@ -438,18 +475,35 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
                 column_map[req_col] = df_col
                 break
 
+    # Clean and sort dataframe by Roll Number to process in attendance order
+    roll_col = column_map["Roll Number"]
+    df[roll_col] = df[roll_col].apply(clean_excel_str)
+    df = df.sort_values(by=[roll_col])
+
     added = 0
     skipped = 0
     errors = []
     total_rows = len(df)
+    seen_in_file = set()
 
     for idx, row in df.iterrows():
         try:
-            roll_number = str(row[column_map["Roll Number"]]).strip()
+            roll_number = clean_excel_str(row[roll_col])
+            if not roll_number or roll_number.lower() in ("nan", "none", ""):
+                continue
 
+            # Check duplicate in file
+            if roll_number in seen_in_file:
+                skipped += 1
+                errors.append(f"Row {idx + 2}: Duplicate Roll Number '{roll_number}' found within the uploaded file")
+                continue
+            seen_in_file.add(roll_number)
+
+            # Check duplicate in database
             existing = await sb_find_one("students", {"roll_number": roll_number})
             if existing and not existing.get("is_deleted"):
                 skipped += 1
+                errors.append(f"Row {idx + 2}: Student with Roll Number '{roll_number}' already exists in database")
                 continue
 
             dob_value = row[column_map["DOB"]]
@@ -463,16 +517,20 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
                     errors.append(f"Row {idx + 2}: Invalid DOB format. Expected DD-MM-YYYY, got: {dob_str}")
                     continue
 
+            # Resolve department and year (use form inputs if provided, otherwise excel)
+            final_dept = department if department else clean_excel_str(row[column_map["Department"]])
+            final_year = year if year else clean_excel_str(row[column_map["Year"]])
+
             now = datetime.now(timezone.utc)
             student = {
                 "id": str(uuid.uuid4()),
                 "roll_number": roll_number,
                 "full_name": str(row[column_map["Full Name"]]).strip(),
-                "department": str(row[column_map["Department"]]).strip(),
-                "year": str(row[column_map["Year"]]).strip(),
+                "department": final_dept,
+                "year": final_year,
                 "dob": dob_str,
-                "email": str(row[column_map["Email"]]).strip(),
-                "phone_number": str(row[column_map["Phone Number"]]).strip(),
+                "email": clean_excel_str(row[column_map["Email"]]),
+                "phone_number": clean_excel_str(row[column_map["Phone Number"]]),
                 "created_at": now.isoformat(),
                 "created_date": now.strftime("%Y-%m-%d"),
                 "created_time": now.strftime("%H:%M:%S"),
@@ -498,9 +556,98 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
 @api_router.get("/students")
 async def get_students(current_user: dict = Depends(require_admin)):
     """Get all non-deleted students."""
-    students = await sb_find("students", {"is_deleted": False}, order_col="created_at", order_asc=False)
+    students = await sb_find("students", {"is_deleted": False}, order_col="roll_number", order_asc=True)
     return students
 
+
+# ===================== STUDENT FOLDER MANAGEMENT =====================
+
+@api_router.get("/students/folder-tree")
+async def get_student_folder_tree(current_user: dict = Depends(require_admin)):
+    """Get dynamic folder structure of students (Department -> Year) with counts."""
+    def _q():
+        resp = supabase.table("students").select("department,year").eq("is_deleted", False).limit(5000).execute()
+        return resp.data or []
+    students = await run(_q)
+    
+    # Aggregate in memory
+    counts = {}
+    for s in students:
+        dept = s.get("department")
+        year = s.get("year")
+        if dept and year:
+            key = (dept, year)
+            counts[key] = counts.get(key, 0) + 1
+            
+    return [
+        {"department": dept, "year": year, "count": count}
+        for (dept, year), count in counts.items()
+    ]
+
+@api_router.get("/students/by-folder")
+async def get_students_by_folder(
+    department: str = Query(...),
+    year: str = Query(...),
+    current_user: dict = Depends(require_admin)
+):
+    """Get all non-deleted students in a specific department and year folder."""
+    students = await sb_find("students", {"department": department, "year": year, "is_deleted": False}, order_col="roll_number", order_asc=True)
+    return students
+
+@api_router.post("/students/bulk-move")
+async def bulk_move_students(
+    data: StudentBulkMove,
+    current_user: dict = Depends(require_admin)
+):
+    """Bulk move selected students to a different department and year."""
+    if not data.student_ids:
+        return {"message": "No students selected", "updated": 0}
+        
+    def _q():
+        resp = (supabase.table("students")
+                .update({"department": data.department, "year": data.year})
+                .in_("id", data.student_ids)
+                .execute())
+        return resp.data or []
+        
+    updated = await run(_q)
+    return {"message": f"Successfully moved {len(updated)} students", "updated": len(updated)}
+
+@api_router.post("/students/bulk-delete")
+async def bulk_delete_students(
+    data: StudentBulkDelete,
+    current_user: dict = Depends(require_admin)
+):
+    """Bulk hard-delete selected students from the database."""
+    if not data.student_ids:
+        return {"message": "No students selected", "deleted": 0}
+        
+    # Check if any selected student has active items or claims
+    def _check_items():
+        resp = supabase.table("items").select("id").in_("student_id", data.student_ids).limit(1).execute()
+        return len(resp.data) > 0
+        
+    def _check_claims():
+        resp = supabase.table("claims").select("id").in_("claimant_id", data.student_ids).limit(1).execute()
+        return len(resp.data) > 0
+        
+    has_items = await run(_check_items)
+    has_claims = await run(_check_claims)
+    
+    if has_items or has_claims:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete students with active items or claims. Please resolve them first."
+        )
+        
+    def _delete():
+        resp = supabase.table("students").delete().in_("id", data.student_ids).execute()
+        return resp.data or []
+        
+    deleted = await run(_delete)
+    return {"message": f"Successfully deleted {len(deleted)} students", "deleted": len(deleted)}
+
+# ===================== STUDENT DETAIL ROUTES =====================
 
 @api_router.get("/students/{student_id}")
 async def get_student(student_id: str, current_user: dict = Depends(require_admin)):
@@ -551,6 +698,24 @@ async def delete_student(student_id: str, current_user: dict = Depends(require_a
     await sb_delete("students", {"id": student_id})
     return {"message": "Student deleted successfully"}
 
+
+@api_router.put("/students/{student_id}/move")
+async def move_student(
+    student_id: str,
+    data: StudentMove,
+    current_user: dict = Depends(require_admin)
+):
+    """Move a student to a different department and/or year."""
+    student = await sb_find_one("students", {"id": student_id})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    await sb_update("students", {"id": student_id}, {
+        "department": data.department,
+        "year": data.year
+    })
+    return {"message": "Student moved successfully"}
+
 # ===================== STUDENT PROFILE =====================
 
 @api_router.get("/profile")
@@ -560,6 +725,50 @@ async def get_profile(current_user: dict = Depends(require_student)):
         raise HTTPException(status_code=404, detail="Profile not found")
     student.pop("admin_notes", None)
     return student
+
+
+@api_router.get("/student/verifications")
+async def get_student_verifications(current_user: dict = Depends(require_student)):
+    student_items = await sb_find("items", {"student_id": current_user["sub"], "item_type": "lost"})
+    item_ids = [i["id"] for i in student_items]
+    if not item_ids:
+        return []
+        
+    def _q():
+        resp = supabase.table("matches").select("*").in_("lost_item_id", item_ids).execute()
+        return resp.data or []
+    matches = await run(_q)
+    
+    res = []
+    for match in matches:
+        lost_item = next((i for i in student_items if i["id"] == match["lost_item_id"]), None)
+        found_item = await sb_find_one("items", {"id": match["found_item_id"]})
+        
+        session = await sb_find_one("verification_sessions", {"match_id": match["id"]})
+        questions = await sb_find("verification_questions", {"match_id": match["id"]}, order_col="created_at", order_asc=True)
+        
+        hydrated_questions = []
+        for q in questions:
+            answer = await sb_find_one("verification_answers", {"question_id": q["id"]})
+            hydrated_questions.append({
+                "id": q["id"],
+                "question": q["question"],
+                "created_at": q["created_at"],
+                "answer": answer["answer"] if answer else None
+            })
+            
+        res.append({
+            "id": match["id"],
+            "status": match["status"],
+            "confidence_score": match["confidence_score"],
+            "created_at": match["created_at"],
+            "lost_item": lost_item,
+            "found_item": found_item,
+            "session": session,
+            "questions": hydrated_questions
+        })
+    return res
+
 
 
 @api_router.post("/profile/picture")
@@ -684,11 +893,10 @@ async def get_my_items(current_user: dict = Depends(require_student)):
 
 @api_router.get("/items/public")
 async def get_public_items():
-    """Public endpoint — shows recently found items without sensitive data."""
+    """Public endpoint — shows recently lost and found items without sensitive data."""
     def _q():
         resp = (supabase.table("items")
                 .select("id,item_type,description,location,image_url,status,created_at,created_date,created_time,likes,dislikes")
-                .eq("item_type", "found")
                 .eq("is_deleted", False)
                 .eq("status", "active")
                 .order("created_at", desc=True)
@@ -1146,9 +1354,70 @@ async def mark_all_read(current_user: dict = Depends(get_current_user)):
 
 # ===================== AI MATCHING =====================
 
+def fallback_match_items(lost_items, found_items):
+    matches = []
+    import re
+    def get_words(text):
+        if not text:
+            return set()
+        # Clean words of length 3 or more
+        return set(re.findall(r'\b\w{3,}\b', text.lower()))
+
+    for lost in lost_items:
+        lost_words = get_words(lost.get("description", ""))
+        lost_loc = (lost.get("location") or "").lower().strip()
+        
+        for found in found_items:
+            found_words = get_words(found.get("description", ""))
+            found_loc = (found.get("location") or "").lower().strip()
+            
+            common_words = lost_words.intersection(found_words)
+            
+            # Word overlap similarity percentage
+            word_score = 0
+            union_len = len(lost_words.union(found_words))
+            if union_len > 0:
+                word_score = (len(common_words) / union_len) * 100
+                
+            # Location score
+            loc_score = 0
+            if lost_loc and found_loc:
+                if lost_loc == found_loc:
+                    loc_score = 100
+                elif lost_loc in found_loc or found_loc in lost_loc:
+                    loc_score = 70
+                    
+            confidence = int(0.6 * word_score + 0.4 * loc_score)
+            
+            # Minimum confidence adjustment if they share keywords/exact locations
+            if len(common_words) >= 1 or (lost_loc and lost_loc == found_loc):
+                if confidence < 50:
+                    confidence = 50 + len(common_words) * 5
+                
+                confidence = min(95, confidence)
+                
+                reason_parts = []
+                if common_words:
+                    reason_parts.append(f"Matching keywords: {', '.join(list(common_words)[:3])}")
+                if lost_loc == found_loc and lost_loc:
+                    reason_parts.append("Same location")
+                elif loc_score > 0:
+                    reason_parts.append("Similar location area")
+                    
+                reason = " & ".join(reason_parts) if reason_parts else "Overlap in item characteristics"
+                
+                matches.append({
+                    "lost_id": lost["id"],
+                    "found_id": found["id"],
+                    "confidence": confidence,
+                    "reason": reason
+                })
+    return matches
+
+
 @api_router.get("/ai/matches")
 async def get_ai_matches(current_user: dict = Depends(require_admin)):
-    """Get AI-suggested matches between lost and found items."""
+    """Get AI-suggested matches between lost and found items (with local keyword fallback)."""
     lost_items = await sb_find("items",
                                {"item_type": "lost", "is_deleted": False, "status": "active"},
                                limit=100)
@@ -1161,26 +1430,27 @@ async def get_ai_matches(current_user: dict = Depends(require_admin)):
 
     matches = []
     try:
-        from openai import AsyncOpenAI
-
         api_key = os.environ.get("EMERGENT_LLM_KEY") or os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            return {"matches": [], "message": "AI service not configured"}
+        matches_data = []
+        llm_success = False
 
-        client = AsyncOpenAI(api_key=api_key)
+        if api_key:
+            try:
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=api_key)
 
-        lost_summary = [
-            {"id": i["id"], "desc": i["description"], "loc": i["location"],
-             "date": i.get("created_date", "")}
-            for i in lost_items[:20]
-        ]
-        found_summary = [
-            {"id": i["id"], "desc": i["description"], "loc": i["location"],
-             "date": i.get("created_date", "")}
-            for i in found_items[:20]
-        ]
+                lost_summary = [
+                    {"id": i["id"], "desc": i["description"], "loc": i["location"],
+                     "date": i.get("created_date", "")}
+                    for i in lost_items[:20]
+                ]
+                found_summary = [
+                    {"id": i["id"], "desc": i["description"], "loc": i["location"],
+                     "date": i.get("created_date", "")}
+                    for i in found_items[:20]
+                ]
 
-        prompt = f"""Match these lost items with found items:
+                prompt = f"""Match these lost items with found items:
 
 LOST ITEMS:
 {json.dumps(lost_summary, indent=2)}
@@ -1190,53 +1460,123 @@ FOUND ITEMS:
 
 Return ONLY a JSON array of matches with confidence scores."""
 
-        response_obj = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an AI assistant helping match lost items with found items in a campus "
-                        "lost and found system.\nCompare items based on description, location, date, and time.\n"
-                        "Return ONLY valid JSON array with matches. Each match should have:\n"
-                        "- lost_id: ID of the lost item\n"
-                        "- found_id: ID of the found item\n"
-                        "- confidence: Score from 0 to 100\n"
-                        "- reason: Brief explanation of why they might match\n"
-                        "Only include matches with confidence >= 50."
-                    )
-                },
-                {"role": "user", "content": prompt}
-            ]
-        )
-        response = response_obj.choices[0].message.content or ""
+                response_obj = await client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an AI assistant helping match lost items with found items in a campus "
+                                "lost and found system.\nCompare items based on description, location, date, and time.\n"
+                                "Return ONLY valid JSON array with matches. Each match should have:\n"
+                                "- lost_id: ID of the lost item\n"
+                                "- found_id: ID of the found item\n"
+                                "- confidence: Score from 0 to 100\n"
+                                "- reason: Brief explanation of why they might match\n"
+                                "Only include matches with confidence >= 50."
+                            )
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    timeout=15.0
+                )
+                response = response_obj.choices[0].message.content or ""
 
-        try:
-            import re
-            json_match = re.search(r'\[.*\]', response, re.DOTALL)
-            if json_match:
-                matches_data = json.loads(json_match.group())
-                for match in matches_data:
-                    if match.get("confidence", 0) >= 50:
-                        lost_item = next((i for i in lost_items if i["id"] == match["lost_id"]), None)
-                        found_item = next((i for i in found_items if i["id"] == match["found_id"]), None)
-                        if lost_item and found_item:
-                            lost_student = await sb_find_one_select(
-                                "students", {"id": lost_item["student_id"]},
-                                "id,full_name,roll_number"
-                            )
-                            found_student = await sb_find_one_select(
-                                "students", {"id": found_item["student_id"]},
-                                "id,full_name,roll_number"
-                            )
-                            matches.append({
-                                "lost_item": {**lost_item, "student": lost_student},
-                                "found_item": {**found_item, "student": found_student},
-                                "confidence": match.get("confidence", 0),
-                                "reason": match.get("reason", "")
+                import re
+                json_match = re.search(r'\[.*\]', response, re.DOTALL)
+                if json_match:
+                    matches_data = json.loads(json_match.group())
+                    llm_success = True
+            except Exception as llm_err:
+                logging.warning(f"AI LLM matching failed, falling back to local rule-based match: {str(llm_err)}")
+
+        if not llm_success:
+            # Run local rule-based match if LLM key is not configured or fails
+            matches_data = fallback_match_items(lost_items, found_items)
+
+        # Hydrate matching data with database student and item details
+        for match in matches_data:
+            conf = match.get("confidence", 0)
+            if conf >= 50:
+                lost_item = next((i for i in lost_items if i["id"] == match["lost_id"]), None)
+                found_item = next((i for i in found_items if i["id"] == match["found_id"]), None)
+                if lost_item and found_item:
+                    lost_student = await sb_find_one_select(
+                        "students", {"id": lost_item["student_id"]},
+                        "id,full_name,roll_number"
+                    )
+                    found_student = await sb_find_one_select(
+                        "students", {"id": found_item["student_id"]},
+                        "id,full_name,roll_number"
+                    )
+                    
+                    # Store match in matches table if confidence >= 70%
+                    if conf >= 70:
+                        # Check if match record already exists
+                        existing = await sb_find("matches", {"lost_item_id": lost_item["id"], "found_item_id": found_item["id"]})
+                        if not existing:
+                            match_id = str(uuid.uuid4())
+                            # Create match record
+                            await sb_insert("matches", {
+                                "id": match_id,
+                                "lost_item_id": lost_item["id"],
+                                "found_item_id": found_item["id"],
+                                "confidence_score": conf,
+                                "status": "pending",
+                                "created_at": datetime.now(timezone.utc).isoformat()
                             })
-        except json.JSONDecodeError:
-            logging.error(f"Failed to parse AI response: {response}")
+                            
+                            # Audit log: AI Match Created
+                            await sb_insert("audit_logs", {
+                                "id": str(uuid.uuid4()),
+                                "action": "ai_match_created",
+                                "item_id": found_item["id"],
+                                "user_id": current_user["sub"],
+                                "user_role": "admin",
+                                "timestamp": datetime.now(timezone.utc).isoformat()
+                            })
+                            
+                            # Automatically notify student
+                            await sb_insert("messages", {
+                                "id": str(uuid.uuid4()),
+                                "sender_id": "system",
+                                "sender_type": "admin",
+                                "recipient_id": lost_item["student_id"],
+                                "recipient_type": "student",
+                                "content": "A possible match has been found for your lost item. Please visit the Lost & Found Office/Admin for verification.",
+                                "item_id": found_item["id"],
+                                "is_read": False,
+                                "created_at": datetime.now(timezone.utc).isoformat()
+                            })
+                            
+                            # Update status to student_notified
+                            await sb_update("matches", {"id": match_id}, {"status": "student_notified"})
+                            
+                            # Create initial verification session
+                            await sb_insert("verification_sessions", {
+                                "id": str(uuid.uuid4()),
+                                "match_id": match_id,
+                                "verification_status": "pending",
+                                "admin_notes": "",
+                                "handover_confirmed": False
+                            })
+                            
+                            # Audit log: Student Notified
+                            await sb_insert("audit_logs", {
+                                "id": str(uuid.uuid4()),
+                                "action": "student_notified",
+                                "item_id": lost_item["id"],
+                                "user_id": lost_item["student_id"],
+                                "user_role": "student",
+                                "timestamp": datetime.now(timezone.utc).isoformat()
+                            })
+                    
+                    matches.append({
+                        "lost_item": {**lost_item, "student": lost_student},
+                        "found_item": {**found_item, "student": found_student},
+                        "confidence": conf,
+                        "reason": match.get("reason", "")
+                    })
 
     except Exception as e:
         logging.error(f"AI matching error: {str(e)}")
@@ -1244,6 +1584,277 @@ Return ONLY a JSON array of matches with confidence scores."""
 
     matches.sort(key=lambda x: x["confidence"], reverse=True)
     return {"matches": matches}
+
+
+@api_router.get("/verification/queue")
+async def get_verification_queue(current_user: dict = Depends(require_admin)):
+    matches_db = await sb_find("matches", {}, order_col="created_at", order_asc=False)
+    res = []
+    for match in matches_db:
+        lost_item = await sb_find_one("items", {"id": match["lost_item_id"]})
+        found_item = await sb_find_one("items", {"id": match["found_item_id"]})
+        if lost_item and found_item:
+            lost_student = await sb_find_one_select("students", {"id": lost_item["student_id"]}, "id,full_name,roll_number,department,year")
+            found_student = await sb_find_one_select("students", {"id": found_item["student_id"]}, "id,full_name,roll_number,department,year")
+            res.append({
+                "id": match["id"],
+                "confidence_score": match["confidence_score"],
+                "status": match["status"],
+                "created_at": match["created_at"],
+                "lost_item": {**lost_item, "student": lost_student},
+                "found_item": {**found_item, "student": found_student}
+            })
+    return res
+
+
+@api_router.get("/verification/session/{match_id}")
+async def get_verification_session(match_id: str, current_user: dict = Depends(get_current_user)):
+    match = await sb_find_one("matches", {"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    session = await sb_find_one("verification_sessions", {"match_id": match_id})
+    if not session:
+        session = await sb_insert("verification_sessions", {
+            "id": str(uuid.uuid4()),
+            "match_id": match_id,
+            "verification_status": "pending",
+            "admin_notes": "",
+            "handover_confirmed": False
+        })
+        
+    questions = await sb_find("verification_questions", {"match_id": match_id}, order_col="created_at", order_asc=True)
+    
+    hydrated_questions = []
+    for q in questions:
+        answer = await sb_find_one("verification_answers", {"question_id": q["id"]})
+        hydrated_questions.append({
+            "id": q["id"],
+            "question": q["question"],
+            "created_by": q["created_by"],
+            "created_at": q["created_at"],
+            "answer": answer["answer"] if answer else None,
+            "answered_at": answer["answered_at"] if answer else None
+        })
+        
+    lost_item = await sb_find_one("items", {"id": match["lost_item_id"]})
+    found_item = await sb_find_one("items", {"id": match["found_item_id"]})
+    lost_student = await sb_find_one_select("students", {"id": lost_item["student_id"]}, "id,full_name,roll_number,department,year") if lost_item else None
+    found_student = await sb_find_one_select("students", {"id": found_item["student_id"]}, "id,full_name,roll_number,department,year") if found_item else None
+    
+    return {
+        "match": {
+            **match,
+            "lost_item": {**lost_item, "student": lost_student} if lost_item else None,
+            "found_item": {**found_item, "student": found_student} if found_item else None
+        },
+        "session": session,
+        "questions": hydrated_questions
+    }
+
+
+@api_router.post("/verification/session/{match_id}/question")
+async def add_verification_question(match_id: str, data: VerificationQuestionCreate, current_user: dict = Depends(require_admin)):
+    match = await sb_find_one("matches", {"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+        
+    q_id = str(uuid.uuid4())
+    await sb_insert("verification_questions", {
+        "id": q_id,
+        "match_id": match_id,
+        "question": data.question,
+        "created_by": current_user["sub"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Update match status and session status to verification_started
+    await sb_update("matches", {"id": match_id}, {"status": "verification_started"})
+    await sb_update("verification_sessions", {"match_id": match_id}, {"verification_status": "under_review"})
+    
+    # Audit log: Question Added
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": "question_added",
+        "item_id": match["found_item_id"],
+        "user_id": current_user["sub"],
+        "user_role": "admin",
+        "reason": f"Question: {data.question}",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Audit log: Verification Started
+    if match["status"] in ["pending", "student_notified"]:
+        await sb_insert("audit_logs", {
+            "id": str(uuid.uuid4()),
+            "action": "verification_started",
+            "item_id": match["found_item_id"],
+            "user_id": current_user["sub"],
+            "user_role": "admin",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+    # Notify student
+    lost_item = await sb_find_one("items", {"id": match["lost_item_id"]})
+    if lost_item:
+        await sb_insert("messages", {
+            "id": str(uuid.uuid4()),
+            "sender_id": current_user["sub"],
+            "sender_type": "admin",
+            "recipient_id": lost_item["student_id"],
+            "recipient_type": "student",
+            "content": f"New verification question: {data.question}",
+            "item_id": match["found_item_id"],
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+    return {"message": "Question added successfully"}
+
+
+@api_router.post("/verification/session/{match_id}/answer")
+async def submit_verification_answer(match_id: str, data: VerificationAnswerCreate, current_user: dict = Depends(require_student)):
+    match = await sb_find_one("matches", {"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+        
+    question = await sb_find_one("verification_questions", {"id": data.question_id})
+    if not question or question["match_id"] != match_id:
+        raise HTTPException(status_code=400, detail="Invalid question ID")
+        
+    existing_ans = await sb_find_one("verification_answers", {"question_id": data.question_id})
+    if existing_ans:
+        raise HTTPException(status_code=400, detail="Question already answered")
+        
+    await sb_insert("verification_answers", {
+        "id": str(uuid.uuid4()),
+        "question_id": data.question_id,
+        "answer": data.answer,
+        "answered_by": current_user["sub"],
+        "answered_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Audit log: Answer Submitted
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": "answer_submitted",
+        "item_id": match["found_item_id"],
+        "user_id": current_user["sub"],
+        "user_role": "student",
+        "reason": f"Answer: {data.answer}",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Check if all questions are answered
+    all_qs = await sb_find("verification_questions", {"match_id": match_id})
+    all_ans = []
+    for q in all_qs:
+        ans = await sb_find_one("verification_answers", {"question_id": q["id"]})
+        if ans:
+            all_ans.append(ans)
+            
+    if len(all_qs) == len(all_ans):
+        await sb_update("matches", {"id": match_id}, {"status": "qa_completed"})
+        
+    return {"message": "Answer submitted successfully"}
+
+
+@api_router.post("/verification/session/{match_id}/notes")
+async def update_verification_notes(match_id: str, data: VerificationNotesUpdate, current_user: dict = Depends(require_admin)):
+    await sb_update("verification_sessions", {"match_id": match_id}, {"admin_notes": data.notes})
+    return {"message": "Notes updated successfully"}
+
+
+@api_router.post("/verification/session/{match_id}/decision")
+async def make_verification_decision(match_id: str, data: VerificationDecision, current_user: dict = Depends(require_admin)):
+    if data.status not in ["approved", "rejected"]:
+        raise HTTPException(status_code=400, detail="Decision must be 'approved' or 'rejected'")
+        
+    match = await sb_find_one("matches", {"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+        
+    await sb_update("matches", {"id": match_id}, {"status": data.status})
+    
+    action = "match_approved" if data.status == "approved" else "match_rejected"
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": action,
+        "item_id": match["found_item_id"],
+        "user_id": current_user["sub"],
+        "user_role": "admin",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Notify student
+    lost_item = await sb_find_one("items", {"id": match["lost_item_id"]})
+    if lost_item:
+        await sb_insert("messages", {
+            "id": str(uuid.uuid4()),
+            "sender_id": current_user["sub"],
+            "sender_type": "admin",
+            "recipient_id": lost_item["student_id"],
+            "recipient_type": "student",
+            "content": f"Your verification has been {data.status}. Please coordinate with the office for handover.",
+            "item_id": match["found_item_id"],
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+    return {"message": f"Verification decision set to {data.status}"}
+
+
+@api_router.post("/verification/session/{match_id}/complete")
+async def complete_verification(match_id: str, data: VerificationComplete, current_user: dict = Depends(require_admin)):
+    match = await sb_find_one("matches", {"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+        
+    if match["status"] != "approved":
+        raise HTTPException(status_code=400, detail="Match must be approved before completion")
+        
+    if not data.handover_confirmed:
+        raise HTTPException(status_code=400, detail="Handover must be physically confirmed")
+        
+    all_qs = await sb_find("verification_questions", {"match_id": match_id})
+    if not all_qs:
+        raise HTTPException(status_code=400, detail="At least one verification question is required")
+        
+    for q in all_qs:
+        ans = await sb_find_one("verification_answers", {"question_id": q["id"]})
+        if not ans:
+            raise HTTPException(status_code=400, detail="All questions must be answered by student")
+            
+    await sb_update("matches", {"id": match_id}, {"status": "completed"})
+    await sb_update("verification_sessions", {"match_id": match_id}, {
+        "handover_confirmed": True,
+        "verification_status": "completed",
+        "completed_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": "item_returned",
+        "item_id": match["found_item_id"],
+        "user_id": current_user["sub"],
+        "user_role": "admin",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": "match_completed",
+        "item_id": match["found_item_id"],
+        "user_id": current_user["sub"],
+        "user_role": "admin",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    await sb_update("items", {"id": match["lost_item_id"]}, {"status": "claimed"})
+    await sb_update("items", {"id": match["found_item_id"]}, {"status": "claimed"})
+    
+    return {"message": "Match completed and item successfully returned"}
+
+
 
 # ===================== ADMIN MANAGEMENT =====================
 
@@ -1311,13 +1922,24 @@ async def get_stats(current_user: dict = Depends(require_admin)):
         pending_claims = _count("claims", status=["pending", "under_review"])
         resolved_items = _count("items", status="claimed")
         deleted_items = _count("items", is_deleted=True)
+        
+        # Verification queue counts
+        pending_verifications = _count("matches", status=["pending", "student_notified", "verification_started", "qa_completed"])
+        approved_matches = _count("matches", status="approved")
+        rejected_matches = _count("matches", status="rejected")
+        completed_returns = _count("matches", status="completed")
+        
         return {
             "total_students": total_students,
             "total_lost": total_lost,
             "total_found": total_found,
             "pending_claims": pending_claims,
             "resolved_items": resolved_items,
-            "deleted_items": deleted_items
+            "deleted_items": deleted_items,
+            "pending_verifications": pending_verifications,
+            "approved_matches": approved_matches,
+            "rejected_matches": rejected_matches,
+            "completed_returns": completed_returns
         }
 
     return await run(_q)

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
-import { Sparkles, RefreshCw, ArrowRight, MapPin, Calendar } from 'lucide-react';
+import { Sparkles, RefreshCw, ArrowRight, MapPin, Calendar, Shield } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -12,6 +12,11 @@ const AdminAIMatches = () => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  
+  // Modal states
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [questionText, setQuestionText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchMatches();
@@ -28,6 +33,40 @@ const AdminAIMatches = () => {
       toast.error('Failed to load AI matches');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenVerifyModal = (match) => {
+    setSelectedMatch(match);
+    setQuestionText('');
+  };
+
+  const handleCloseVerifyModal = () => {
+    setSelectedMatch(null);
+    setQuestionText('');
+  };
+
+  const handleSendQuestion = async () => {
+    if (!questionText.trim()) {
+      toast.error('Please type a verification question');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await aiAPI.initiateVerification(
+        selectedMatch.lost_item.id,
+        selectedMatch.found_item.id,
+        questionText.trim()
+      );
+      toast.success('Verification question sent to owner!');
+      handleCloseVerifyModal();
+      fetchMatches();
+    } catch (error) {
+      console.error('Failed to send verification:', error);
+      toast.error(error.response?.data?.detail || 'Failed to send verification question');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -194,9 +233,86 @@ const AdminAIMatches = () => {
                     </div>
                   </div>
                 </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+                  <Button
+                    onClick={() => handleOpenVerifyModal(match)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                    data-testid={`verify-btn-${index}`}
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Verify Match
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Verification Modal */}
+      {selectedMatch && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-100 overflow-hidden animate-fade-in">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <Shield className="w-6 h-6" />
+                <h3 className="text-lg font-bold font-outfit">Ask Verification Question</h3>
+              </div>
+              
+              <div className="text-sm text-slate-500 space-y-2">
+                <p>
+                  You are initiating verification for a match between:
+                </p>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1">
+                  <p className="font-semibold text-slate-800">Lost Item:</p>
+                  <p className="line-clamp-1">{selectedMatch.lost_item?.description}</p>
+                  <p className="text-xs text-slate-400">Owner: {selectedMatch.lost_item?.student?.full_name}</p>
+                  
+                  <div className="border-t border-slate-200 my-2 pt-2"></div>
+                  
+                  <p className="font-semibold text-slate-800">Found Item:</p>
+                  <p className="line-clamp-1">{selectedMatch.found_item?.description}</p>
+                </div>
+                <p>
+                  The owner will receive a notification and can submit their answer to verify ownership.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Verification Question
+                </label>
+                <textarea
+                  value={questionText}
+                  onChange={(e) => setQuestionText(e.target.value)}
+                  placeholder="e.g. Please describe any scratches, keychains, or specific features of the item."
+                  rows={4}
+                  className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+                  data-testid="verification-question-textarea"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseVerifyModal}
+                  disabled={submitting}
+                  data-testid="close-verify-modal-btn"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendQuestion}
+                  disabled={submitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="send-verification-btn"
+                >
+                  {submitting ? 'Sending...' : 'Send Question'}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
