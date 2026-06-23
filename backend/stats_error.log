@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "D:\LostnFound_clg-main\backend\server.py", line 2034, in _q
+    pending_verifications = _count("matches", status=["pending", "student_notified", "verification_started", "qa_completed"])
+  File "D:\LostnFound_clg-main\backend\server.py", line 2022, in _count
+    return q.execute().count or 0
+           ~~~~~~~~~^^
+  File "C:\Users\ppraw\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\postgrest\_sync\request_builder.py", line 96, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.matches' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.messages'", 'details': None}

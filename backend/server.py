@@ -939,13 +939,16 @@ async def get_item(item_id: str, current_user: dict = Depends(get_current_user))
 
 
 @api_router.delete("/items/{item_id}")
-async def soft_delete_item(item_id: str, data: DeleteReason, current_user: dict = Depends(require_student)):
+async def soft_delete_item(item_id: str, data: DeleteReason, current_user: dict = Depends(get_current_user)):
     item = await sb_find_one("items", {"id": item_id})
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    if item["student_id"] != current_user["sub"]:
-        raise HTTPException(status_code=403, detail="You can only delete your own items")
+    is_admin = current_user.get("role") in ["admin", "super_admin"]
+    is_owner = current_user.get("role") == "student" and item.get("student_id") == current_user.get("sub")
+
+    if not (is_admin or is_owner):
+        raise HTTPException(status_code=403, detail="You do not have permission to delete this item")
 
     await sb_update("items", {"id": item_id}, {
         "is_deleted": True,
@@ -957,8 +960,8 @@ async def soft_delete_item(item_id: str, data: DeleteReason, current_user: dict 
         "id": str(uuid.uuid4()),
         "action": "item_soft_deleted",
         "item_id": item_id,
-        "user_id": current_user["sub"],
-        "user_role": "student",
+        "user_id": current_user.get("sub"),
+        "user_role": current_user.get("role"),
         "reason": data.reason,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
@@ -1586,25 +1589,130 @@ Return ONLY a JSON array of matches with confidence scores."""
     return {"matches": matches}
 
 
+@api_router.post("/ai/matches/initiate-verification")
+async def initiate_verification(data: InitiateVerificationRequest, current_user: dict = Depends(require_admin)):
+    # Check if a match already exists between these two items
+    existing = await sb_find("matches", {"lost_item_id": data.lost_item_id, "found_item_id": data.found_item_id})
+    if existing:
+        match_record = existing[0]
+    else:
+        # Create match record manually
+        match_id = str(uuid.uuid4())
+        match_record = await sb_insert("matches", {
+            "id": match_id,
+            "lost_item_id": data.lost_item_id,
+            "found_item_id": data.found_item_id,
+            "confidence_score": 100,  # Manually initiated match
+            "status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Create initial verification session
+        await sb_insert("verification_sessions", {
+            "id": str(uuid.uuid4()),
+            "match_id": match_record["id"],
+            "verification_status": "pending",
+            "admin_notes": "",
+            "handover_confirmed": False
+        })
+        
+        # Audit log: Match Created
+        await sb_insert("audit_logs", {
+            "id": str(uuid.uuid4()),
+            "action": "ai_match_created",
+            "item_id": data.found_item_id,
+            "user_id": current_user["sub"],
+            "user_role": "admin",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+
+    match_id = match_record["id"]
+    
+    # Create the verification question
+    q_id = str(uuid.uuid4())
+    await sb_insert("verification_questions", {
+        "id": q_id,
+        "match_id": match_id,
+        "question": data.question,
+        "created_by": current_user["sub"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Update match status and session status to verification_started
+    await sb_update("matches", {"id": match_id}, {"status": "verification_started"})
+    await sb_update("verification_sessions", {"match_id": match_id}, {"verification_status": "under_review"})
+    
+    # Audit log: Question Added
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": "question_added",
+        "item_id": data.found_item_id,
+        "user_id": current_user["sub"],
+        "user_role": "admin",
+        "reason": f"Question: {data.question}",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Audit log: Verification Started
+    await sb_insert("audit_logs", {
+        "id": str(uuid.uuid4()),
+        "action": "verification_started",
+        "item_id": data.found_item_id,
+        "user_id": current_user["sub"],
+        "user_role": "admin",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Notify student
+    lost_item = await sb_find_one("items", {"id": data.lost_item_id})
+    if lost_item:
+        await sb_insert("messages", {
+            "id": str(uuid.uuid4()),
+            "sender_id": current_user["sub"],
+            "sender_type": "admin",
+            "recipient_id": lost_item["student_id"],
+            "recipient_type": "student",
+            "content": f"New verification question: {data.question}",
+            "item_id": data.found_item_id,
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+    return {"message": "Verification initiated successfully", "match_id": match_id}
+
+
 @api_router.get("/verification/queue")
 async def get_verification_queue(current_user: dict = Depends(require_admin)):
-    matches_db = await sb_find("matches", {}, order_col="created_at", order_asc=False)
-    res = []
-    for match in matches_db:
-        lost_item = await sb_find_one("items", {"id": match["lost_item_id"]})
-        found_item = await sb_find_one("items", {"id": match["found_item_id"]})
-        if lost_item and found_item:
-            lost_student = await sb_find_one_select("students", {"id": lost_item["student_id"]}, "id,full_name,roll_number,department,year")
-            found_student = await sb_find_one_select("students", {"id": found_item["student_id"]}, "id,full_name,roll_number,department,year")
-            res.append({
-                "id": match["id"],
-                "confidence_score": match["confidence_score"],
-                "status": match["status"],
-                "created_at": match["created_at"],
-                "lost_item": {**lost_item, "student": lost_student},
-                "found_item": {**found_item, "student": found_student}
-            })
-    return res
+    logger.info("Starting verification queue retrieval.")
+    try:
+        logger.info("Executing Supabase query to find matches.")
+        matches_db = await sb_find("matches", {}, order_col="created_at", order_asc=False)
+        logger.info(f"Retrieved {len(matches_db)} matches from Supabase.")
+        res = []
+        for match in matches_db:
+            logger.info(f"Hydrating match details for match ID: {match.get('id')}")
+            lost_item = await sb_find_one("items", {"id": match["lost_item_id"]})
+            found_item = await sb_find_one("items", {"id": match["found_item_id"]})
+            if lost_item and found_item:
+                lost_student = await sb_find_one_select("students", {"id": lost_item["student_id"]}, "id,full_name,roll_number,department,year")
+                found_student = await sb_find_one_select("students", {"id": found_item["student_id"]}, "id,full_name,roll_number,department,year")
+                res.append({
+                    "id": match["id"],
+                    "confidence_score": match["confidence_score"],
+                    "status": match["status"],
+                    "created_at": match["created_at"],
+                    "lost_item": {**lost_item, "student": lost_student},
+                    "found_item": {**found_item, "student": found_student}
+                })
+        logger.info("Successfully finished hydration of matches.")
+        return res
+    except Exception as e:
+        logger.error(f"Verification queue failed: {str(e)}", exc_info=True)
+        # Raise 503 Service Unavailable if it's a connection / getaddrinfo error
+        if "getaddrinfo" in str(e) or "connect" in str(e).lower() or "connection" in str(e).lower():
+            raise HTTPException(status_code=503, detail="Database connection temporarily unavailable. Please check server connectivity.")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
 
 
 @api_router.get("/verification/session/{match_id}")
@@ -1906,6 +2014,7 @@ async def delete_admin(admin_id: str, current_user: dict = Depends(require_super
 
 @api_router.get("/stats")
 async def get_stats(current_user: dict = Depends(require_admin)):
+    import traceback
     def _count(table, **filters):
         q = supabase.table(table).select("id", count="exact")
         for k, v in filters.items():
@@ -1916,31 +2025,36 @@ async def get_stats(current_user: dict = Depends(require_admin)):
         return q.execute().count or 0
 
     def _q():
-        total_students = _count("students")
-        total_lost = _count("items", item_type="lost", is_deleted=False)
-        total_found = _count("items", item_type="found", is_deleted=False)
-        pending_claims = _count("claims", status=["pending", "under_review"])
-        resolved_items = _count("items", status="claimed")
-        deleted_items = _count("items", is_deleted=True)
-        
-        # Verification queue counts
-        pending_verifications = _count("matches", status=["pending", "student_notified", "verification_started", "qa_completed"])
-        approved_matches = _count("matches", status="approved")
-        rejected_matches = _count("matches", status="rejected")
-        completed_returns = _count("matches", status="completed")
-        
-        return {
-            "total_students": total_students,
-            "total_lost": total_lost,
-            "total_found": total_found,
-            "pending_claims": pending_claims,
-            "resolved_items": resolved_items,
-            "deleted_items": deleted_items,
-            "pending_verifications": pending_verifications,
-            "approved_matches": approved_matches,
-            "rejected_matches": rejected_matches,
-            "completed_returns": completed_returns
-        }
+        try:
+            total_students = _count("students")
+            total_lost = _count("items", item_type="lost", is_deleted=False)
+            total_found = _count("items", item_type="found", is_deleted=False)
+            pending_claims = _count("claims", status=["pending", "under_review"])
+            resolved_items = _count("items", status="claimed")
+            deleted_items = _count("items", is_deleted=True)
+            
+            # Verification queue counts
+            pending_verifications = _count("matches", status=["pending", "student_notified", "verification_started", "qa_completed"])
+            approved_matches = _count("matches", status="approved")
+            rejected_matches = _count("matches", status="rejected")
+            completed_returns = _count("matches", status="completed")
+            
+            return {
+                "total_students": total_students,
+                "total_lost": total_lost,
+                "total_found": total_found,
+                "pending_claims": pending_claims,
+                "resolved_items": resolved_items,
+                "deleted_items": deleted_items,
+                "pending_verifications": pending_verifications,
+                "approved_matches": approved_matches,
+                "rejected_matches": rejected_matches,
+                "completed_returns": completed_returns
+            }
+        except Exception as e:
+            with open("stats_error.log", "w") as f:
+                f.write(traceback.format_exc())
+            raise e
 
     return await run(_q)
 
@@ -1957,16 +2071,18 @@ async def health():
 
 # ---------------------------------------------------------------------------
 # Register router and middleware
+# NOTE: Middleware must be added BEFORE include_router so CORS headers are
+# present on ALL responses, including error responses from endpoints.
 # ---------------------------------------------------------------------------
-app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
 
 # Configure logging
 logging.basicConfig(

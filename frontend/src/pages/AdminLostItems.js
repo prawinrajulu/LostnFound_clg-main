@@ -19,8 +19,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
-import { Search, Eye, MapPin, Calendar } from 'lucide-react';
+import { Search, Eye, MapPin, Calendar, Trash2 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -29,10 +31,32 @@ const AdminLostItems = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchItems();
   }, []);
+
+  const handleDelete = async () => {
+    if (!deleteReason.trim() || !itemToDelete) return;
+    setDeleting(true);
+    try {
+      await itemsAPI.deleteItem(itemToDelete.id, deleteReason);
+      toast.success('Item deleted successfully');
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
+      setDeleteReason('');
+      fetchItems();
+    } catch (error) {
+      console.error('Failed to delete item:', error);
+      toast.error(error.response?.data?.detail || 'Failed to delete item');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const fetchItems = async () => {
     try {
@@ -142,14 +166,30 @@ const AdminLostItems = () => {
                     </TableCell>
                     <TableCell>{getStatusBadge(item.status)}</TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedItem(item)}
-                        data-testid={`view-item-${item.id}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedItem(item)}
+                          data-testid={`view-item-${item.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {item.status === 'active' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setItemToDelete(item);
+                              setShowDeleteDialog(true);
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            data-testid={`delete-item-${item.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -207,6 +247,47 @@ const AdminLostItems = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Lost Item</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for deleting this item. This action will be logged in the audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="deleteReason">Reason for deletion *</Label>
+              <Textarea
+                id="deleteReason"
+                placeholder="e.g., Reported in error, duplicate posting, resolved by hand, etc."
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                data-testid="delete-reason-input"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDeleteDialog(false);
+              setItemToDelete(null);
+              setDeleteReason('');
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDelete} 
+              disabled={!deleteReason.trim() || deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="confirm-delete-btn"
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

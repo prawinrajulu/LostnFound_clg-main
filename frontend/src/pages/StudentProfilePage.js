@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { studentAPI } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { studentAPI, itemsAPI } from '../services/api';
+import { ItemCard } from '../components/ItemCard';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -10,13 +12,17 @@ import { User, Camera, Mail, Phone, GraduationCap, Calendar, Hash } from 'lucide
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 const StudentProfilePage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [items, setItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
 
   useEffect(() => {
     fetchProfile();
+    fetchItems();
   }, []);
 
   const fetchProfile = async () => {
@@ -27,6 +33,29 @@ const StudentProfilePage = () => {
       console.error('Failed to fetch profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchItems = async () => {
+    try {
+      const response = await itemsAPI.getMyItems();
+      setItems(response.data);
+    } catch (error) {
+      console.error('Failed to fetch items:', error);
+    } finally {
+      setItemsLoading(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId, reason) => {
+    try {
+      await itemsAPI.deleteItem(itemId, reason);
+      toast.success('Item deleted successfully');
+      fetchItems();
+    } catch (error) {
+      console.error('Failed to delete item:', error);
+      toast.error('Failed to delete item');
+      throw error;
     }
   };
 
@@ -62,7 +91,7 @@ const StudentProfilePage = () => {
   const data = profile || user;
 
   return (
-    <div className="max-w-2xl mx-auto animate-fade-in" data-testid="student-profile-page">
+    <div className="max-w-4xl mx-auto animate-fade-in" data-testid="student-profile-page">
       <h1 className="font-outfit text-2xl font-bold text-slate-900 mb-6">My Profile</h1>
 
       <Card>
@@ -184,6 +213,62 @@ const StudentProfilePage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Reported Items Sections */}
+      <div className="mt-8 space-y-6">
+        <div>
+          <h2 className="font-outfit text-xl font-bold text-slate-900 mb-1">My Reported Items</h2>
+          <p className="text-slate-500 text-sm">Manage your lost and found postings</p>
+        </div>
+
+        {itemsLoading ? (
+          <div className="flex justify-center py-6">
+            <div className="spinner" />
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {/* Lost Items */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-800 border-b pb-1">Lost Items ({items.filter(item => item.item_type === 'lost').length})</h3>
+              {items.filter(item => item.item_type === 'lost').length === 0 ? (
+                <p className="text-sm text-slate-400 italic">No lost items reported.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {items.filter(item => item.item_type === 'lost').map(item => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      showActions
+                      onDelete={handleDeleteItem}
+                      onView={() => navigate(`/student/item/${item.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Found Items */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-800 border-b pb-1">Found Items ({items.filter(item => item.item_type === 'found').length})</h3>
+              {items.filter(item => item.item_type === 'found').length === 0 ? (
+                <p className="text-sm text-slate-400 italic">No found items reported.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {items.filter(item => item.item_type === 'found').map(item => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      showActions
+                      onDelete={handleDeleteItem}
+                      onView={() => navigate(`/student/item/${item.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
