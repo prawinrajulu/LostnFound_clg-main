@@ -24,7 +24,7 @@ const AdminVerificationSession = () => {
 
   useEffect(() => {
     fetchSession();
-  }, [matchId]);
+  }, [fetchSession]);
 
   const fetchSession = async () => {
     setLoading(true);

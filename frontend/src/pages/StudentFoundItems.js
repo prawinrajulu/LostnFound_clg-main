@@ -21,7 +21,7 @@ const StudentFoundItems = () => {
 
   useEffect(() => {
     filterItems();
-  }, [searchQuery, items]);
+  }, [filterItems]);
 
   const fetchFoundItems = async () => {
     try {
