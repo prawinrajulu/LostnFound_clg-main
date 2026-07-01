@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// CRA (react-scripts / craco) — must use REACT_APP_ prefix with process.env.
+// Set REACT_APP_BACKEND_URL in your Vercel environment variables dashboard.
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
 
 // Create axios instance with auth header
@@ -8,7 +10,7 @@ const createAuthAxios = () => {
   const instance = axios.create({
     baseURL: API
   });
-  
+
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -16,7 +18,7 @@ const createAuthAxios = () => {
     }
     return config;
   });
-  
+
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -27,7 +29,7 @@ const createAuthAxios = () => {
       return Promise.reject(error);
     }
   );
-  
+
   return instance;
 };
 
@@ -45,7 +47,36 @@ export const studentAPI = {
 
 // Items APIs
 export const itemsAPI = {
-  getPublicItems: () => axios.get(`${API}/items/public`),
+  /**
+   * Public endpoint — no auth required.
+   * Backend returns a plain JSON array: [{ id, item_type, description, ... }, ...]
+   * We always resolve with { data: Array } so callers can safely do response.data.
+   */
+  getPublicItems: () =>
+    axios
+      .get(`${API}/items/public`)
+      .then((response) => {
+        // Normalise: ensure response.data is always an array
+        const raw = response.data;
+        if (Array.isArray(raw)) {
+          return response; // already correct shape
+        }
+        // Defensive unwrap for unexpected wrapping
+        if (raw && Array.isArray(raw.items)) {
+          return { ...response, data: raw.items };
+        }
+        if (raw && Array.isArray(raw.data)) {
+          return { ...response, data: raw.data };
+        }
+        console.error('[itemsAPI.getPublicItems] Unexpected response shape:', raw);
+        return { ...response, data: [] };
+      })
+      .catch((error) => {
+        console.error('[itemsAPI.getPublicItems] Request failed:', error);
+        // Re-throw so the caller's catch block handles it gracefully
+        return Promise.reject(error);
+      }),
+
   getMyItems: () => api.get('/items/my'),
   getItems: (params) => api.get('/items', { params }),
   getItem: (id) => api.get(`/items/${id}`),
@@ -61,11 +92,11 @@ export const claimsAPI = {
   getClaims: (params) => api.get('/claims', { params }),
   getClaim: (id) => api.get(`/claims/${id}`),
   createClaim: (itemId, message) => api.post('/claims', { item_id: itemId, message }),
-  addVerificationQuestion: (claimId, question) => 
+  addVerificationQuestion: (claimId, question) =>
     api.post(`/claims/${claimId}/verification-question`, { claim_id: claimId, question }),
-  answerVerification: (claimId, answer) => 
+  answerVerification: (claimId, answer) =>
     api.post(`/claims/${claimId}/answer`, { claim_id: claimId, answer }),
-  makeDecision: (claimId, status, notes) => 
+  makeDecision: (claimId, status, notes) =>
     api.post(`/claims/${claimId}/decision`, { status, notes })
 };
 
@@ -73,7 +104,7 @@ export const claimsAPI = {
 export const messagesAPI = {
   getMessages: () => api.get('/messages'),
   getUnreadCount: () => api.get('/messages/unread-count'),
-  sendMessage: (recipientId, recipientType, content, itemId) => 
+  sendMessage: (recipientId, recipientType, content, itemId) =>
     api.post('/messages', { recipient_id: recipientId, recipient_type: recipientType, content, item_id: itemId }),
   markAsRead: (id) => api.post(`/messages/${id}/read`),
   markAllRead: () => api.post('/messages/mark-all-read')
@@ -90,7 +121,7 @@ export const studentsAPI = {
     if (year) formData.append('year', year);
     return api.post('/students/upload-excel', formData);
   },
-  addNote: (studentId, note) => 
+  addNote: (studentId, note) =>
     api.post(`/students/${studentId}/admin-note`, { student_id: studentId, note }),
   deleteStudent: (id) => api.delete(`/students/${id}`),
   updateStudent: (id, data) => api.put(`/students/${id}`, data),
@@ -111,10 +142,10 @@ export const studentsAPI = {
 // Admin APIs
 export const adminAPI = {
   getAdmins: () => api.get('/admins'),
-  createAdmin: (username, password, fullName) => 
+  createAdmin: (username, password, fullName) =>
     api.post('/admins', { username, password, full_name: fullName }),
   deleteAdmin: (id) => api.delete(`/admins/${id}`),
-  changePassword: (oldPassword, newPassword) => 
+  changePassword: (oldPassword, newPassword) =>
     api.post('/auth/admin/change-password', { old_password: oldPassword, new_password: newPassword })
 };
 
@@ -141,4 +172,3 @@ export const verificationAPI = {
   completeVerification: (matchId, handoverConfirmed) => api.post(`/verification/session/${matchId}/complete`, { handover_confirmed: handoverConfirmed }),
   getStudentVerifications: () => api.get('/student/verifications')
 };
-

@@ -1,4 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
+from contextlib import asynccontextmanager
+from postgrest.types import CountMethod
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -123,7 +125,7 @@ async def sb_delete(table: str, filters: dict) -> list:
 async def sb_count(table: str, filters: dict) -> int:
     """Count matching rows using head=True exact count."""
     def _q():
-        q = supabase.table(table).select("id", count="exact")
+        q = supabase.table(table).select("id", count=CountMethod.exact)
         for k, v in filters.items():
             if isinstance(v, dict) and "$in" in v:
                 # Handle $in-style queries via .in_()
@@ -140,7 +142,7 @@ async def sb_count(table: str, filters: dict) -> int:
 async def sb_count_in(table: str, filters: dict, in_col: str, in_vals: list) -> int:
     """Count rows where column is IN a list of values + optional filters."""
     def _q():
-        q = supabase.table(table).select("id", count="exact")
+        q = supabase.table(table).select("id", count=CountMethod.exact)
         for k, v in filters.items():
             q = q.eq(k, v)
         q = q.in_(in_col, in_vals)
@@ -153,7 +155,12 @@ async def sb_count_in(table: str, filters: dict, in_col: str, in_vals: list) -> 
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Campus Lost & Found API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await startup_event()
+    yield
+
+app = FastAPI(title="Campus Lost & Found API", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -234,7 +241,7 @@ class ClaimDecision(BaseModel):
 
 # ===================== HELPER FUNCTIONS =====================
 
-def create_token(user_id: str, role: str, extra_data: dict = None) -> str:
+def create_token(user_id: str, role: str, extra_data: Optional[dict] = None) -> str:
     payload = {
         "sub": user_id,
         "role": role,
@@ -281,7 +288,8 @@ def verify_password(password: str, hashed: str) -> bool:
 
 # ===================== STARTUP =====================
 
-@app.on_event("startup")
+# Startup logic extracted to a plain async function so it can be called
+# from the lifespan handler (replaces deprecated @app.on_event("startup")).
 async def startup_event():
     """Seed the superadmin account if it doesn't exist yet."""
     try:
@@ -382,7 +390,7 @@ async def change_admin_password(data: AdminPasswordChange, current_user: dict = 
 
 @api_router.post("/students/upload-excel")
 async def upload_students_excel(file: UploadFile = File(...), current_user: dict = Depends(require_admin)):
-    if not file.filename.endswith(('.xlsx', '.xls')):
+    if not (file.filename or '').endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only Excel files are allowed")
 
     content = await file.read()
@@ -424,7 +432,7 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
                 if dob_str and len(dob_str) == 10 and dob_str[2] == '-' and dob_str[5] == '-':
                     pass
                 else:
-                    errors.append(f"Row {idx + 2}: Invalid DOB format. Expected DD-MM-YYYY, got: {dob_str}")
+                    errors.append(f"Row {int(str(idx)) + 2}: Invalid DOB format. Expected DD-MM-YYYY, got: {dob_str}")
                     continue
 
             now = datetime.now(timezone.utc)
@@ -448,7 +456,7 @@ async def upload_students_excel(file: UploadFile = File(...), current_user: dict
             added += 1
 
         except Exception as e:
-            errors.append(f"Row {idx + 2}: {str(e)}")
+            errors.append(f"Row {int(str(idx)) + 2}: {str(e)}")
 
     return {
         "message": f"Upload complete. Added: {added}, Skipped (duplicates): {skipped}",
@@ -528,10 +536,10 @@ async def get_profile(current_user: dict = Depends(require_student)):
 
 @api_router.post("/profile/picture")
 async def upload_profile_picture(file: UploadFile = File(...), current_user: dict = Depends(require_student)):
-    if not file.content_type.startswith("image/"):
+    if not (file.content_type or '').startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    ext = (file.filename or '').split(".")[-1] if "." in (file.filename or '') else "jpg"
     filename = f"{current_user['sub']}.{ext}"
     filepath = PROFILES_DIR / filename
 
@@ -556,11 +564,11 @@ async def create_item(
     if item_type not in ["lost", "found"]:
         raise HTTPException(status_code=400, detail="Item type must be 'lost' or 'found'")
 
-    if not image.content_type.startswith("image/"):
+    if not (image.content_type or '').startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
     item_id = str(uuid.uuid4())
-    ext = image.filename.split(".")[-1] if "." in image.filename else "jpg"
+    ext = (image.filename or '').split(".")[-1] if "." in (image.filename or '') else "jpg"
     image_filename = f"{item_id}.{ext}"
     image_path = ITEMS_DIR / image_filename
 
@@ -1077,7 +1085,7 @@ async def get_messages(current_user: dict = Depends(get_current_user)):
 async def get_unread_count(current_user: dict = Depends(get_current_user)):
     def _q():
         resp = (supabase.table("messages")
-                .select("id", count="exact")
+                .select("id", count=CountMethod.exact)
                 .eq("recipient_id", current_user["sub"])
                 .eq("is_read", False)
                 .execute())
@@ -1260,7 +1268,7 @@ async def delete_admin(admin_id: str, current_user: dict = Depends(require_super
 @api_router.get("/stats")
 async def get_stats(current_user: dict = Depends(require_admin)):
     def _count(table, **filters):
-        q = supabase.table(table).select("id", count="exact")
+        q = supabase.table(table).select("id", count=CountMethod.exact)
         for k, v in filters.items():
             if isinstance(v, list):
                 q = q.in_(k, v)
