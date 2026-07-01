@@ -33,7 +33,7 @@ const StudentLoginPage = () => {
       toast.success('Login successful!');
       navigate('/student');
     } catch (error) {
-      const message = error.response?.data?.detail || 'Invalid credentials';
+      const message = error.response?.data?.detail || error.message || 'Login failed. Please try again.';
       toast.error(message);
     } finally {
       setLoading(false);

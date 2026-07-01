@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// CRA / craco: env vars use REACT_APP_ prefix.
+// IMPORTANT: Set REACT_APP_BACKEND_URL in your Vercel environment variables
+// to https://lostnfound-clg-main.onrender.com (no trailing slash).
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
 
 const AuthContext = createContext(null);
@@ -48,29 +51,44 @@ export const AuthProvider = ({ children }) => {
   }, [fetchUser]);
 
   const studentLogin = async (rollNumber, dob) => {
-    const response = await axios.post(`${API}/auth/student/login`, {
-      roll_number: rollNumber,
-      dob: dob
-    });
-    const { token: newToken, user: userData, role: userRole } = response.data;
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setUser(userData);
-    setRole(userRole);
-    return response.data;
+    try {
+      const response = await axios.post(`${API}/auth/student/login`, {
+        roll_number: rollNumber,
+        dob: dob
+      });
+      const { token: newToken, user: userData, role: userRole } = response.data;
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      setUser(userData);
+      setRole(userRole);
+      return response.data;
+    } catch (error) {
+      // Network/CORS errors have no response — make the message clear
+      if (!error.response) {
+        throw new Error('Cannot reach server. Check your internet connection or backend URL.');
+      }
+      throw error;
+    }
   };
 
   const adminLogin = async (username, password) => {
-    const response = await axios.post(`${API}/auth/admin/login`, {
-      username,
-      password
-    });
-    const { token: newToken, user: userData, role: userRole } = response.data;
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setUser(userData);
-    setRole(userRole);
-    return response.data;
+    try {
+      const response = await axios.post(`${API}/auth/admin/login`, {
+        username,
+        password
+      });
+      const { token: newToken, user: userData, role: userRole } = response.data;
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      setUser(userData);
+      setRole(userRole);
+      return response.data;
+    } catch (error) {
+      if (!error.response) {
+        throw new Error('Cannot reach server. Check your internet connection or backend URL.');
+      }
+      throw error;
+    }
   };
 
   const logout = () => {

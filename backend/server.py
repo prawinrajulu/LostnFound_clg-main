@@ -47,12 +47,13 @@ print("Supabase client connected successfully.")
 
 # ---------------------------------------------------------------------------
 # JWT Configuration
-# Priority: SUPABASE_SECREAT_KEY (from .env) → SUPABASE_SECRET_KEY →
-#           JWT_SECRET → built-in fallback
+# Use the explicit JWT_SECRET from .env as first priority.
+# SUPABASE_SECREAT_KEY is a short opaque token, NOT a JWT signing secret —
+# using it as JWT_SECRET causes verification failures on Render deployments.
 # ---------------------------------------------------------------------------
 JWT_SECRET = (
-    _supabase_secret or
     os.environ.get('JWT_SECRET') or
+    _supabase_secret or
     'campus_lost_found_secret_key'
 )
 JWT_ALGORITHM = "HS256"
@@ -2194,10 +2195,27 @@ async def health():
 # NOTE: Middleware must be added BEFORE include_router so CORS headers are
 # present on ALL responses, including error responses from endpoints.
 # ---------------------------------------------------------------------------
+# Build CORS origins list:
+# 1. Read CORS_ORIGINS env var (comma-separated), stripping whitespace from each entry.
+# 2. Always add the Vercel frontend URL from FRONTEND_URL env var if set.
+# 3. Always include localhost for local development.
+_raw_cors = os.environ.get('CORS_ORIGINS', '')
+_cors_list = [o.strip() for o in _raw_cors.split(',') if o.strip()] if _raw_cors else []
+_frontend_url = os.environ.get('FRONTEND_URL', '').strip()
+if _frontend_url and _frontend_url not in _cors_list:
+    _cors_list.append(_frontend_url)
+for _dev_origin in ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000']:
+    if _dev_origin not in _cors_list:
+        _cors_list.append(_dev_origin)
+# If still empty, fall back to allow all (unsafe for production — set CORS_ORIGINS on Render)
+if not _cors_list:
+    _cors_list = ['*']
+print(f"CORS allowed origins: {_cors_list}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
+    allow_origins=_cors_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )
