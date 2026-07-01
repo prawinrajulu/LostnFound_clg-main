@@ -24,7 +24,7 @@ import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import { Search, Eye, MapPin, Calendar, Trash2 } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
 const AdminLostItems = () => {
   const [items, setItems] = useState([]);

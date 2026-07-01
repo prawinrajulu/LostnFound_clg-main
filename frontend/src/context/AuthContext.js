@@ -1,10 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
-// CRA / craco: env vars use REACT_APP_ prefix.
-// IMPORTANT: Set REACT_APP_BACKEND_URL in your Vercel environment variables
-// to https://lostnfound-clg-main.onrender.com (no trailing slash).
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 const API = `${BACKEND_URL}/api`;
 
 const AuthContext = createContext(null);

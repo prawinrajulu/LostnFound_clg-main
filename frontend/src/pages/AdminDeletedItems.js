@@ -22,7 +22,7 @@ import {
 import { toast } from 'sonner';
 import { Trash2, RotateCcw, AlertTriangle, Eye } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
 const AdminDeletedItems = () => {
   const [items, setItems] = useState([]);

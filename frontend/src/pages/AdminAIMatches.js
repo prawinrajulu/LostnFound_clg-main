@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { Sparkles, RefreshCw, ArrowRight, MapPin, Calendar, Shield } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
 const AdminAIMatches = () => {
   const [matches, setMatches] = useState([]);

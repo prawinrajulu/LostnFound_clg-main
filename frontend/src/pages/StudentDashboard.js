@@ -292,7 +292,7 @@ const StudentDashboard = () => {
                   <div className="flex items-center gap-4">
                     {claim.item?.image_url && (
                       <img 
-                        src={`${process.env.REACT_APP_BACKEND_URL}${claim.item.image_url}`}
+                        src={`${process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com'}${claim.item.image_url}`}
                         alt=""
                         className="w-16 h-16 rounded-lg object-cover"
                         onError={(e) => {

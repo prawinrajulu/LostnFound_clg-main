@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner';
 import { Package, Eye, MapPin, Calendar } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
 const AdminFoundItems = () => {
   const [items, setItems] = useState([]);

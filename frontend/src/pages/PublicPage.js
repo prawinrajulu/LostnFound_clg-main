@@ -8,9 +8,7 @@ import { PublicHeader } from '../components/Header';
 import { itemsAPI } from '../services/api';
 import bgimg from '../assets/bgimg.jpg';
 
-// CRA (react-scripts / craco) uses REACT_APP_ prefix with process.env.
-// Make sure REACT_APP_BACKEND_URL is set in Vercel environment variables.
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
 const PublicPage = () => {
   const [items, setItems] = useState([]);

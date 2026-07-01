@@ -74,7 +74,7 @@ export const StudentHeader = ({ user, unreadCount = 0 }) => {
               <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center overflow-hidden">
                 {user?.profile_picture ? (
                   <img 
-                    src={`${process.env.REACT_APP_BACKEND_URL}${user.profile_picture}`} 
+                    src={`${process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com'}${user.profile_picture}`} 
                     alt="" 
                     className="w-full h-full object-cover"
                   />

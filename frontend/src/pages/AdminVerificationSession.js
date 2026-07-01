@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { Shield, ArrowLeft, RefreshCw, Send, CheckCircle, XCircle, MapPin, Calendar, CheckSquare } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
 const AdminVerificationSession = () => {
   const { matchId } = useParams();
