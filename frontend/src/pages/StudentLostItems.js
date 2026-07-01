@@ -20,8 +20,19 @@ const StudentLostItems = () => {
   }, []);
 
   useEffect(() => {
-    filterItems();
-  }, [filterItems]);
+    if (!searchQuery.trim()) {
+      setFilteredItems(items);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = items.filter(item =>
+      item.description?.toLowerCase().includes(query) ||
+      item.location?.toLowerCase().includes(query) ||
+      item.created_date?.includes(query)
+    );
+    setFilteredItems(filtered);
+  }, [searchQuery, items]);
 
   const fetchLostItems = async () => {
     try {
@@ -36,21 +47,6 @@ const StudentLostItems = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const filterItems = () => {
-    if (!searchQuery.trim()) {
-      setFilteredItems(items);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = items.filter(item =>
-      item.description?.toLowerCase().includes(query) ||
-      item.location?.toLowerCase().includes(query) ||
-      item.created_date?.includes(query)
-    );
-    setFilteredItems(filtered);
   };
 
   if (loading) {

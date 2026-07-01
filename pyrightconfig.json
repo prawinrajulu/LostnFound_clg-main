@@ -1,0 +1,29 @@
+{
+  "venvPath": "backend",
+  "venv": "venv",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Windows",
+  "include": [
+    "backend",
+    "emergency_admin_reset.py",
+    "backend_test.py"
+  ],
+  "exclude": [
+    "backend/venv",
+    "backend/__pycache__",
+    "SPCET-LF-main",
+    "frontend",
+    "tests"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "backend",
+      "venvPath": "backend",
+      "venv": "venv",
+      "extraPaths": ["backend/venv/Lib/site-packages"]
+    }
+  ],
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "none",
+  "reportMissingImports": "warning"
+}

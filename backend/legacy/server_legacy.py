@@ -31,7 +31,12 @@ SUPABASE_SERVICE_ROLE_KEY: str = os.environ['SUPABASE_SERVICE_ROLE_KEY']
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'campus_lost_found_secret_key')
+JWT_SECRET = (
+    os.environ.get('SUPABASE_SECREAT_KEY') or
+    os.environ.get('SUPABASE_SECRET_KEY') or
+    os.environ.get('JWT_SECRET') or
+    'campus_lost_found_secret_key'
+)
 JWT_ALGORITHM = "HS256"
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
+from contextlib import asynccontextmanager
+from postgrest.types import CountMethod
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -25,21 +27,46 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # ---------------------------------------------------------------------------
-# Supabase client (service role — full access, bypasses RLS)
+# Supabase credentials — loaded from backend/.env via python-dotenv
 # ---------------------------------------------------------------------------
 SUPABASE_URL: str = os.environ['SUPABASE_URL']
+SUPABASE_ANON_KEY: str = os.environ.get('SUPABASE_ANON_KEY', '')
 SUPABASE_SERVICE_ROLE_KEY: str = os.environ['SUPABASE_SERVICE_ROLE_KEY']
 
+# SUPABASE_SECREAT_KEY is the Supabase project secret key (note: env var uses
+# the original spelling 'SECREAT' as configured in backend/.env).
+# It is used as the JWT signing secret so that tokens issued by this server
+# are cryptographically tied to the same Supabase project secret.
+_supabase_secret = os.environ.get('SUPABASE_SECREAT_KEY') or os.environ.get('SUPABASE_SECRET_KEY')
+
 print("SUPABASE_URL:", SUPABASE_URL)
-print("KEY:", SUPABASE_SERVICE_ROLE_KEY[:15])
-print("SERVICE KEY:", SUPABASE_SERVICE_ROLE_KEY)
-print("KEY LENGTH:", len(SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else 0)
+print("SERVICE_ROLE_KEY prefix:", SUPABASE_SERVICE_ROLE_KEY[:15] if SUPABASE_SERVICE_ROLE_KEY else 'NOT SET')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-print("CONNECTED SUCCESSFULLY")
+print("Supabase client connected successfully.")
+
+# ---------------------------------------------------------------------------
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'campus_lost_found_secret_key')
+# Priority: SUPABASE_SECREAT_KEY (from .env) → SUPABASE_SECRET_KEY →
+#           JWT_SECRET → built-in fallback
+# ---------------------------------------------------------------------------
+JWT_SECRET = (
+    _supabase_secret or
+    os.environ.get('JWT_SECRET') or
+    'campus_lost_found_secret_key'
+)
 JWT_ALGORITHM = "HS256"
+
+def _resolve_jwt_source() -> str:
+    if os.environ.get('SUPABASE_SECREAT_KEY'):
+        return 'SUPABASE_SECREAT_KEY'
+    if os.environ.get('SUPABASE_SECRET_KEY'):
+        return 'SUPABASE_SECRET_KEY'
+    if os.environ.get('JWT_SECRET'):
+        return 'JWT_SECRET'
+    return 'built-in default (change in production!)'
+
+print(f"JWT_SECRET resolved from: {_resolve_jwt_source()}")
 
 # ---------------------------------------------------------------------------
 # Helper: run synchronous supabase calls in a thread so we don't block the
@@ -125,7 +152,7 @@ async def sb_delete(table: str, filters: dict) -> list:
 async def sb_count(table: str, filters: dict) -> int:
     """Count matching rows using head=True exact count."""
     def _q():
-        q = supabase.table(table).select("id", count="exact")
+        q = supabase.table(table).select("id", count=CountMethod.exact)
         for k, v in filters.items():
             if isinstance(v, dict) and "$in" in v:
                 # Handle $in-style queries via .in_()
@@ -142,7 +169,7 @@ async def sb_count(table: str, filters: dict) -> int:
 async def sb_count_in(table: str, filters: dict, in_col: str, in_vals: list) -> int:
     """Count rows where column is IN a list of values + optional filters."""
     def _q():
-        q = supabase.table(table).select("id", count="exact")
+        q = supabase.table(table).select("id", count=CountMethod.exact)
         for k, v in filters.items():
             q = q.eq(k, v)
         q = q.in_(in_col, in_vals)
@@ -155,7 +182,13 @@ async def sb_count_in(table: str, filters: dict, in_col: str, in_vals: list) -> 
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Campus Lost & Found API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _seed_accounts()
+    yield
+
+
+app = FastAPI(title="Campus Lost & Found API", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -178,6 +211,15 @@ class StudentCreate(BaseModel):
     dob: str  # DD-MM-YYYY format
     email: str
     phone_number: str
+
+class StudentUpdate(BaseModel):
+    roll_number: Optional[str] = None
+    full_name: Optional[str] = None
+    department: Optional[str] = None
+    year: Optional[str] = None
+    dob: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class StudentLogin(BaseModel):
     roll_number: str
@@ -246,6 +288,12 @@ class StudentBulkMove(BaseModel):
 class StudentBulkDelete(BaseModel):
     student_ids: List[str]
 
+class RenameFolderRequest(BaseModel):
+    old_department: str
+    new_department: str
+    old_year: Optional[str] = None   # None means rename the whole department
+    new_year: Optional[str] = None
+
 class InitiateVerificationRequest(BaseModel):
     lost_item_id: str
     found_item_id: str
@@ -271,7 +319,7 @@ class VerificationComplete(BaseModel):
 
 # ===================== HELPER FUNCTIONS =====================
 
-def create_token(user_id: str, role: str, extra_data: dict = None) -> str:
+def create_token(user_id: str, role: str, extra_data: Optional[dict] = None) -> str:
     payload = {
         "sub": user_id,
         "role": role,
@@ -318,8 +366,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 # ===================== STARTUP =====================
 
-@app.on_event("startup")
-async def startup_event():
+async def _seed_accounts():
     """Seed the superadmin and default admin accounts if they don't exist yet."""
     # --- Super Admin ---
     try:
@@ -453,7 +500,7 @@ async def upload_students_excel(
     year: Optional[str] = Form(None),
     current_user: dict = Depends(require_admin)
 ):
-    if not file.filename.endswith(('.xlsx', '.xls')):
+    if not (file.filename or "").endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only Excel files are allowed")
 
     content = await file.read()
@@ -500,15 +547,16 @@ async def upload_students_excel(
             # Check duplicate in file
             if roll_number in seen_in_file:
                 skipped += 1
-                errors.append(f"Row {idx + 2}: Duplicate Roll Number '{roll_number}' found within the uploaded file")
+                errors.append(f"Row {int(str(idx)) + 2}: Duplicate Roll Number '{roll_number}' found within the uploaded file")
                 continue
             seen_in_file.add(roll_number)
 
             # Check duplicate in database
+            
             existing = await sb_find_one("students", {"roll_number": roll_number})
             if existing and not existing.get("is_deleted"):
                 skipped += 1
-                errors.append(f"Row {idx + 2}: Student with Roll Number '{roll_number}' already exists in database")
+                errors.append(f"Row {int(str(idx)) + 2}: Student with Roll Number '{roll_number}' already exists in database")
                 continue
 
             dob_value = row[column_map["DOB"]]
@@ -519,7 +567,7 @@ async def upload_students_excel(
                 if dob_str and len(dob_str) == 10 and dob_str[2] == '-' and dob_str[5] == '-':
                     pass
                 else:
-                    errors.append(f"Row {idx + 2}: Invalid DOB format. Expected DD-MM-YYYY, got: {dob_str}")
+                    errors.append(f"Row {int(str(idx)) + 2}: Invalid DOB format. Expected DD-MM-YYYY, got: {dob_str}")
                     continue
 
             # Resolve department and year (use form inputs if provided, otherwise excel)
@@ -547,7 +595,7 @@ async def upload_students_excel(
             added += 1
 
         except Exception as e:
-            errors.append(f"Row {idx + 2}: {str(e)}")
+            errors.append(f"Row {int(str(idx)) + 2}: {str(e)}")
 
     return {
         "message": f"Upload complete. Added: {added}, Skipped (duplicates): {skipped}",
@@ -598,6 +646,29 @@ async def get_students_by_folder(
     """Get all non-deleted students in a specific department and year folder."""
     students = await sb_find("students", {"department": department, "year": year, "is_deleted": False}, order_col="roll_number", order_asc=True)
     return students
+
+@api_router.put("/students/rename-folder")
+async def rename_folder(
+    data: RenameFolderRequest,
+    current_user: dict = Depends(require_admin)
+):
+    """Rename a department folder or a year folder within a department.
+    - If old_year is None: rename the whole department (all years).
+    - If old_year is set: rename only that department+year combination.
+    """
+    updates = {"department": data.new_department}
+    if data.old_year is not None and data.new_year is not None:
+        updates["year"] = data.new_year
+
+    def _q():
+        q = supabase.table("students").update(updates).eq("department", data.old_department).eq("is_deleted", False)
+        if data.old_year is not None:
+            q = q.eq("year", data.old_year)
+        resp = q.execute()
+        return resp.data or []
+
+    updated = await run(_q)
+    return {"message": f"Folder renamed successfully. {len(updated)} student(s) updated.", "updated": len(updated)}
 
 @api_router.post("/students/bulk-move")
 async def bulk_move_students(
@@ -704,6 +775,46 @@ async def delete_student(student_id: str, current_user: dict = Depends(require_a
     return {"message": "Student deleted successfully"}
 
 
+@api_router.put("/students/{student_id}")
+async def update_student(
+    student_id: str,
+    data: StudentUpdate,
+    current_user: dict = Depends(require_admin)
+):
+    student = await sb_find_one("students", {"id": student_id})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    if data.roll_number and data.roll_number != student.get("roll_number"):
+        existing = await sb_find_one("students", {"roll_number": data.roll_number})
+        if existing and not existing.get("is_deleted") and existing.get("id") != student_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Student with Roll Number '{data.roll_number}' already exists in database"
+            )
+
+    updates = {}
+    if data.roll_number is not None:
+        updates["roll_number"] = data.roll_number.strip()
+    if data.full_name is not None:
+        updates["full_name"] = data.full_name.strip()
+    if data.department is not None:
+        updates["department"] = data.department.strip()
+    if data.year is not None:
+        updates["year"] = data.year.strip()
+    if data.dob is not None:
+        updates["dob"] = data.dob.strip()
+    if data.email is not None:
+        updates["email"] = data.email.strip()
+    if data.phone_number is not None:
+        updates["phone_number"] = data.phone_number.strip()
+
+    if updates:
+        await sb_update("students", {"id": student_id}, updates)
+
+    return {"message": "Student updated successfully"}
+
+
 @api_router.put("/students/{student_id}/move")
 async def move_student(
     student_id: str,
@@ -778,10 +889,10 @@ async def get_student_verifications(current_user: dict = Depends(require_student
 
 @api_router.post("/profile/picture")
 async def upload_profile_picture(file: UploadFile = File(...), current_user: dict = Depends(require_student)):
-    if not file.content_type.startswith("image/"):
+    if not (file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    ext = (file.filename or "").split(".")[-1] if "." in (file.filename or "") else "jpg"
     filename = f"{current_user['sub']}.{ext}"
     filepath = PROFILES_DIR / filename
 
@@ -800,23 +911,27 @@ async def create_item(
     item_type: str = Form(...),
     description: str = Form(...),
     location: str = Form(...),
-    image: UploadFile = File(...),
+    image: Optional[UploadFile] = File(None),
     current_user: dict = Depends(require_student)
 ):
     if item_type not in ["lost", "found"]:
         raise HTTPException(status_code=400, detail="Item type must be 'lost' or 'found'")
 
-    if not image.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
-
     item_id = str(uuid.uuid4())
-    ext = image.filename.split(".")[-1] if "." in image.filename else "jpg"
-    image_filename = f"{item_id}.{ext}"
-    image_path = ITEMS_DIR / image_filename
+    image_url = None
 
-    with open(image_path, "wb") as f:
-        content = await image.read()
-        f.write(content)
+    if image is not None and image.filename:
+        if not (image.content_type or "").startswith("image/"):
+            raise HTTPException(status_code=400, detail="Only image files are allowed")
+
+        ext = image.filename.split(".")[-1] if "." in image.filename else "jpg"
+        image_filename = f"{item_id}.{ext}"
+        image_path = ITEMS_DIR / image_filename
+
+        with open(image_path, "wb") as f:
+            content = await image.read()
+            f.write(content)
+        image_url = f"/uploads/items/{image_filename}"
 
     now = datetime.now(timezone.utc)
     item = {
@@ -824,7 +939,7 @@ async def create_item(
         "item_type": item_type,
         "description": description,
         "location": location,
-        "image_url": f"/uploads/items/{image_filename}",
+        "image_url": image_url,
         "student_id": current_user["sub"],
         "status": "active",
         "is_deleted": False,
@@ -1329,7 +1444,7 @@ async def get_messages(current_user: dict = Depends(get_current_user)):
 async def get_unread_count(current_user: dict = Depends(get_current_user)):
     def _q():
         resp = (supabase.table("messages")
-                .select("id", count="exact")
+                .select("id", count=CountMethod.exact)
                 .eq("recipient_id", current_user["sub"])
                 .eq("is_read", False)
                 .execute())
@@ -2021,7 +2136,7 @@ async def delete_admin(admin_id: str, current_user: dict = Depends(require_super
 async def get_stats(current_user: dict = Depends(require_admin)):
     import traceback
     def _count(table, **filters):
-        q = supabase.table(table).select("id", count="exact")
+        q = supabase.table(table).select("id", count=CountMethod.exact)
         for k, v in filters.items():
             if isinstance(v, list):
                 q = q.in_(k, v)

@@ -27,7 +27,12 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'campus_lost_found_secret_key')
+JWT_SECRET = (
+    os.environ.get('SUPABASE_SECREAT_KEY') or
+    os.environ.get('SUPABASE_SECRET_KEY') or
+    os.environ.get('JWT_SECRET') or
+    'campus_lost_found_secret_key'
+)
 JWT_ALGORITHM = "HS256"
 
 # Create the main app

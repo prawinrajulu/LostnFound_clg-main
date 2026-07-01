@@ -37,7 +37,8 @@ import {
   FileSpreadsheet,
   Grid,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  Pencil
 } from 'lucide-react';
 
 const AdminStudentFolders = () => {
@@ -81,6 +82,28 @@ const AdminStudentFolders = () => {
   const [moveDept, setMoveDept] = useState('IT');
   const [moveYear, setMoveYear] = useState('1');
 
+  // Edit dialog state
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editStudent, setEditStudent] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    roll_number: '',
+    full_name: '',
+    department: '',
+    year: '',
+    dob: '',
+    email: '',
+    phone_number: ''
+  });
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Rename folder (dept/year card) state
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [renameMode, setRenameMode] = useState('dept'); // 'dept' | 'year'
+  const [renamingDept, setRenamingDept] = useState('');
+  const [renamingYear, setRenamingYear] = useState('');
+  const [renameNewDept, setRenameNewDept] = useState('');
+  const [renameNewYear, setRenameNewYear] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
   // List of standard options for move dropdown
   const DEPARTMENTS = ['IT', 'CSE', 'ECE', 'EEE', 'MECH', 'CIVIL'];
   const YEARS = ['1', '2', '3', '4'];
@@ -346,6 +369,90 @@ const AdminStudentFolders = () => {
     }
   };
 
+  // Edit student handler
+  const handleOpenEdit = (student) => {
+    setEditStudent(student);
+    setEditFormData({
+      roll_number: student.roll_number || '',
+      full_name: student.full_name || '',
+      department: student.department || '',
+      year: student.year || '',
+      dob: student.dob || '',
+      email: student.email || '',
+      phone_number: student.phone_number || ''
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
+    const { roll_number, full_name, department, year, dob, email, phone_number } = editFormData;
+    if (!roll_number || !full_name || !department || !year || !dob || !email || !phone_number) {
+      toast.error('All fields are required');
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await studentsAPI.updateStudent(editStudent.id, editFormData);
+      toast.success('Student updated successfully');
+      setShowEditDialog(false);
+      await fetchInitialData();
+      if (selectedDept && selectedYear) {
+        fetchFolderStudents(selectedDept, selectedYear);
+      }
+    } catch (error) {
+      const message = error.response?.data?.detail || 'Failed to update student';
+      toast.error(message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Rename folder handlers
+  const handleOpenRenameFolder = (e, mode, dept, year) => {
+    e.stopPropagation(); // prevent card navigation click
+    setRenameMode(mode);
+    setRenamingDept(dept);
+    setRenamingYear(year || '');
+    setRenameNewDept(dept);
+    setRenameNewYear(year || '');
+    setShowRenameDialog(true);
+  };
+
+  const handleRenameFolder = async () => {
+    if (renameMode === 'dept' && !renameNewDept.trim()) {
+      toast.error('Department name cannot be empty');
+      return;
+    }
+    if (renameMode === 'year' && !renameNewYear.trim()) {
+      toast.error('Year cannot be empty');
+      return;
+    }
+    setRenameSaving(true);
+    try {
+      const resp = await studentsAPI.renameFolder(
+        renamingDept,
+        renameMode === 'dept' ? renameNewDept.trim() : renamingDept,
+        renameMode === 'year' ? renamingYear : null,
+        renameMode === 'year' ? renameNewYear.trim() : null
+      );
+      toast.success(resp.data.message);
+      setShowRenameDialog(false);
+      await fetchInitialData();
+      // If we renamed the currently selected dept or year, update selection
+      if (renameMode === 'dept') {
+        if (selectedDept === renamingDept) setSelectedDept(renameNewDept.trim());
+      } else {
+        if (selectedYear === renamingYear) setSelectedYear(renameNewYear.trim());
+      }
+    } catch (error) {
+      const message = error.response?.data?.detail || 'Failed to rename folder';
+      toast.error(message);
+    } finally {
+      setRenameSaving(false);
+    }
+  };
+
   // Selection state helpers
   const handleCheckAll = (e) => {
     if (e.target.checked) {
@@ -493,17 +600,24 @@ const AdminStudentFolders = () => {
                   <Card 
                     key={dept.name}
                     onClick={() => handleDeptClick(dept.name)}
-                    className="card-hover cursor-pointer border-slate-200/80 hover:border-indigo-200/80 hover:shadow-md transition-all duration-200"
+                    className="card-hover cursor-pointer border-slate-200/80 hover:border-indigo-200/80 hover:shadow-md transition-all duration-200 group"
                   >
                     <CardContent className="p-6 flex items-center gap-4">
                       <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
                         <FolderOpen className="w-6 h-6 fill-indigo-100" />
                       </div>
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <h3 className="font-outfit font-bold text-slate-900 text-lg">{dept.name}</h3>
                         <p className="text-sm text-slate-500">{dept.studentCount} Students</p>
                       </div>
-                      <ChevronRight className="w-5 h-5 text-slate-300 ml-auto" />
+                      <button
+                        onClick={(e) => handleOpenRenameFolder(e, 'dept', dept.name, null)}
+                        title="Rename Department"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-indigo-100 text-indigo-500 hover:text-indigo-700 shrink-0"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
                     </CardContent>
                   </Card>
                 ))
@@ -515,20 +629,27 @@ const AdminStudentFolders = () => {
           {level === 'years' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {getYearsForDept(selectedDept).map((item) => (
-                <Card 
+                <Card
                   key={item.year}
                   onClick={() => handleYearClick(item.year)}
-                  className="card-hover cursor-pointer border-slate-200/80 hover:border-indigo-200/80 hover:shadow-md transition-all duration-200"
+                  className="card-hover cursor-pointer border-slate-200/80 hover:border-indigo-200/80 hover:shadow-md transition-all duration-200 group"
                 >
                   <CardContent className="p-6 flex items-center gap-4">
                     <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center">
                       <Folder className="w-6 h-6 fill-slate-200" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <h3 className="font-outfit font-bold text-slate-900 text-lg">{formatYear(item.year)}</h3>
                       <p className="text-sm text-slate-500">{item.count} Students</p>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 ml-auto" />
+                    <button
+                      onClick={(e) => handleOpenRenameFolder(e, 'year', selectedDept, item.year)}
+                      title="Rename Year"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-indigo-100 text-indigo-500 hover:text-indigo-700 shrink-0"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
                   </CardContent>
                 </Card>
               ))}
@@ -618,6 +739,16 @@ const AdminStudentFolders = () => {
                                     data-testid={`view-student-${student.id}`}
                                   >
                                     <Eye className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleOpenEdit(student)}
+                                    title="Edit Student"
+                                    className="hover:bg-indigo-50 text-slate-500 hover:text-indigo-600"
+                                    data-testid={`edit-student-${student.id}`}
+                                  >
+                                    <Pencil className="w-4 h-4" />
                                   </Button>
                                   <Button
                                     variant="ghost"
@@ -1060,6 +1191,188 @@ const AdminStudentFolders = () => {
             </Button>
             <Button onClick={handleAddNote} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg" data-testid="save-note-btn">
               Save Note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Student Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-outfit text-slate-950 font-bold">Edit Student Details</DialogTitle>
+            <DialogDescription>
+              Update information for {editStudent?.full_name} ({editStudent?.roll_number})
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateStudent} className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">Roll Number</label>
+                <Input
+                  value={editFormData.roll_number}
+                  onChange={(e) => setEditFormData({ ...editFormData, roll_number: e.target.value })}
+                  className="border-slate-200 rounded-lg focus:ring-indigo-500"
+                  data-testid="edit-student-roll"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">Full Name</label>
+                <Input
+                  value={editFormData.full_name}
+                  onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                  className="border-slate-200 rounded-lg focus:ring-indigo-500"
+                  data-testid="edit-student-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">Department</label>
+                <select
+                  value={editFormData.department}
+                  onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium text-slate-800"
+                  data-testid="edit-student-dept"
+                >
+                  {DEPARTMENTS.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">Year</label>
+                <select
+                  value={editFormData.year}
+                  onChange={(e) => setEditFormData({ ...editFormData, year: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium text-slate-800"
+                  data-testid="edit-student-year"
+                >
+                  {YEARS.map(y => (
+                    <option key={y} value={y}>{formatYear(y)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">DOB (DD-MM-YYYY)</label>
+                <Input
+                  value={editFormData.dob}
+                  onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
+                  placeholder="DD-MM-YYYY"
+                  className="border-slate-200 rounded-lg focus:ring-indigo-500"
+                  data-testid="edit-student-dob"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">Email</label>
+                <Input
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  className="border-slate-200 rounded-lg focus:ring-indigo-500"
+                  data-testid="edit-student-email"
+                />
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <label className="text-sm font-semibold text-slate-700">Phone Number</label>
+                <Input
+                  value={editFormData.phone_number}
+                  onChange={(e) => setEditFormData({ ...editFormData, phone_number: e.target.value })}
+                  className="border-slate-200 rounded-lg focus:ring-indigo-500"
+                  data-testid="edit-student-phone"
+                />
+              </div>
+            </div>
+            <DialogFooter className="pt-4 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowEditDialog(false)}
+                disabled={editSaving}
+                className="rounded-lg"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={editSaving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
+                data-testid="save-edit-btn"
+              >
+                {editSaving ? (
+                  <><div className="spinner w-3.5 h-3.5 mr-2 border-white" /> Saving...</>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Folder Dialog */}
+      <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-outfit text-slate-950 font-bold">
+              {renameMode === 'dept' ? '✏️ Rename Department' : '✏️ Rename Year'}
+            </DialogTitle>
+            <DialogDescription>
+              {renameMode === 'dept'
+                ? `Rename department "${renamingDept}" — updates all students inside.`
+                : `Rename year "${formatYear(renamingYear)}" in ${renamingDept} — updates all students inside.`
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            {renameMode === 'dept' ? (
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">New Department Name</label>
+                <Input
+                  value={renameNewDept}
+                  onChange={(e) => setRenameNewDept(e.target.value)}
+                  placeholder="e.g. CSE"
+                  className="border-slate-200 rounded-lg focus:ring-indigo-500"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">New Year Value</label>
+                <select
+                  value={renameNewYear}
+                  onChange={(e) => setRenameNewYear(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium text-slate-800"
+                >
+                  {YEARS.map(y => (
+                    <option key={y} value={y}>{formatYear(y)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-700">
+              <span>⚠️</span>
+              <span>All students in this folder will be updated to reflect the new name.</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRenameDialog(false)}
+              disabled={renameSaving}
+              className="rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameFolder}
+              disabled={renameSaving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
+            >
+              {renameSaving ? (
+                <><div className="spinner w-3.5 h-3.5 mr-2 border-white" /> Saving...</>
+              ) : 'Rename Folder'}
             </Button>
           </DialogFooter>
         </DialogContent>

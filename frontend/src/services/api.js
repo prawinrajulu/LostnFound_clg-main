@@ -93,6 +93,14 @@ export const studentsAPI = {
   addNote: (studentId, note) => 
     api.post(`/students/${studentId}/admin-note`, { student_id: studentId, note }),
   deleteStudent: (id) => api.delete(`/students/${id}`),
+  updateStudent: (id, data) => api.put(`/students/${id}`, data),
+  renameFolder: (oldDepartment, newDepartment, oldYear = null, newYear = null) =>
+    api.put('/students/rename-folder', {
+      old_department: oldDepartment,
+      new_department: newDepartment,
+      old_year: oldYear,
+      new_year: newYear,
+    }),
   getFolderTree: () => api.get('/students/folder-tree'),
   getByFolder: (department, year) => api.get('/students/by-folder', { params: { department, year } }),
   moveStudent: (id, department, year) => api.put(`/students/${id}/move`, { department, year }),

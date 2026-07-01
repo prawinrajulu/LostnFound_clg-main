@@ -36,8 +36,8 @@ const ReportLostPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.description || !formData.location || !formData.date || !formData.time || !image) {
-      toast.error('Please fill all fields and upload an image');
+    if (!formData.description || !formData.location || !formData.date || !formData.time) {
+      toast.error('Please fill all required fields');
       return;
     }
 
@@ -49,7 +49,9 @@ const ReportLostPage = () => {
       data.append('location', formData.location);
       data.append('date', formData.date);
       data.append('time', formData.time);
-      data.append('image', image);
+      if (image) {
+        data.append('image', image);
+      }
 
       await itemsAPI.createItem(data);
       toast.success('Lost item reported successfully!');
@@ -90,7 +92,7 @@ const ReportLostPage = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Image Upload */}
             <div className="space-y-2">
-              <Label>Item Image *</Label>
+              <Label>Item Image</Label>
               <div 
                 className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
                   imagePreview ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'

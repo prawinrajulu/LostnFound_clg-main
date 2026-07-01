@@ -23,7 +23,7 @@ import {
   DialogFooter,
 } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { Users, Upload, Search, Eye, Trash2, FileSpreadsheet, StickyNote } from 'lucide-react';
+import { Users, Upload, Search, Eye, Trash2, FileSpreadsheet, StickyNote, Pencil } from 'lucide-react';
 
 const AdminStudents = () => {
   const [students, setStudents] = useState([]);
@@ -35,6 +35,49 @@ const AdminStudents = () => {
   const [noteStudent, setNoteStudent] = useState(null);
   const [noteText, setNoteText] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editStudent, setEditStudent] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    roll_number: '',
+    full_name: '',
+    department: '',
+    year: '',
+    dob: '',
+    email: '',
+    phone_number: ''
+  });
+
+  const handleOpenEdit = (student) => {
+    setEditStudent(student);
+    setEditFormData({
+      roll_number: student.roll_number || '',
+      full_name: student.full_name || '',
+      department: student.department || '',
+      year: student.year || '',
+      dob: student.dob || '',
+      email: student.email || '',
+      phone_number: student.phone_number || ''
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
+    if (!editFormData.roll_number || !editFormData.full_name || !editFormData.department || !editFormData.year || !editFormData.dob || !editFormData.email || !editFormData.phone_number) {
+      toast.error('All fields are required');
+      return;
+    }
+
+    try {
+      await studentsAPI.updateStudent(editStudent.id, editFormData);
+      toast.success('Student updated successfully');
+      setShowEditDialog(false);
+      fetchStudents();
+    } catch (error) {
+      const message = error.response?.data?.detail || 'Failed to update student';
+      toast.error(message);
+    }
+  };
 
   useEffect(() => {
     fetchStudents();
@@ -191,6 +234,14 @@ const AdminStudents = () => {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleOpenEdit(student)}
+                          data-testid={`edit-student-${student.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setNoteStudent(student);
                             setShowNoteDialog(true);
@@ -339,6 +390,92 @@ const AdminStudents = () => {
               Save Note
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Student Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Student Details</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateStudent} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="edit-roll">Roll Number</Label>
+                <Input
+                  id="edit-roll"
+                  value={editFormData.roll_number}
+                  onChange={(e) => setEditFormData({ ...editFormData, roll_number: e.target.value })}
+                  data-testid="edit-student-roll"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-name">Full Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editFormData.full_name}
+                  onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                  data-testid="edit-student-name"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-dept">Department</Label>
+                <Input
+                  id="edit-dept"
+                  value={editFormData.department}
+                  onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
+                  data-testid="edit-student-dept"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-year">Year</Label>
+                <Input
+                  id="edit-year"
+                  value={editFormData.year}
+                  onChange={(e) => setEditFormData({ ...editFormData, year: e.target.value })}
+                  data-testid="edit-student-year"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-dob">DOB (DD-MM-YYYY)</Label>
+                <Input
+                  id="edit-dob"
+                  value={editFormData.dob}
+                  onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
+                  placeholder="DD-MM-YYYY"
+                  data-testid="edit-student-dob"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  data-testid="edit-student-email"
+                />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label htmlFor="edit-phone">Phone Number</Label>
+                <Input
+                  id="edit-phone"
+                  value={editFormData.phone_number}
+                  onChange={(e) => setEditFormData({ ...editFormData, phone_number: e.target.value })}
+                  data-testid="edit-student-phone"
+                />
+              </div>
+            </div>
+            <DialogFooter className="pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" data-testid="save-edit-btn">
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
