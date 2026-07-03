@@ -38,7 +38,6 @@ SUPABASE_SERVICE_ROLE_KEY: str = os.environ['SUPABASE_SERVICE_ROLE_KEY']
 # It is used as the JWT signing secret so that tokens issued by this server
 # are cryptographically tied to the same Supabase project secret.
 _supabase_secret = os.environ.get('SUPABASE_SECREAT_KEY') or os.environ.get('SUPABASE_SECRET_KEY')
-
 print("SUPABASE_URL:", SUPABASE_URL)
 print("SERVICE_ROLE_KEY prefix:", SUPABASE_SERVICE_ROLE_KEY[:15] if SUPABASE_SERVICE_ROLE_KEY else 'NOT SET')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)

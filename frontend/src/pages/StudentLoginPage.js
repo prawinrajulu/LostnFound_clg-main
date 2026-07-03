@@ -28,7 +28,7 @@ const StudentLoginPage = () => {
       // Convert date from YYYY-MM-DD (HTML date input) to DD-MM-YYYY (backend format)
       const [year, month, day] = dob.split('-');
       const formattedDob = `${day}-${month}-${year}`;
-      
+
       await studentLogin(rollNumber.toUpperCase(), formattedDob);
       toast.success('Login successful!');
       navigate('/student');
@@ -43,7 +43,7 @@ const StudentLoginPage = () => {
   return (
     <div className="min-h-screen bg-slate-50">
       <PublicHeader />
-      
+
       <div className="flex items-center justify-center py-12 px-4">
         <Card className="w-full max-w-md animate-fade-in">
           <CardHeader className="text-center">
@@ -62,14 +62,14 @@ const StudentLoginPage = () => {
                 <Input
                   id="rollNumber"
                   type="text"
-                  placeholder="e.g., 20CS001"
+                  placeholder="112723205025"
                   value={rollNumber}
                   onChange={(e) => setRollNumber(e.target.value.toUpperCase())}
                   className="uppercase"
                   data-testid="roll-number-input"
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="dob">Date of Birth</Label>
                 <div className="relative">
@@ -87,8 +87,8 @@ const StudentLoginPage = () => {
                 <p className="text-xs text-slate-500">Use the calendar picker or type your date of birth</p>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-slate-900 hover:bg-slate-800 btn-press"
                 disabled={loading}
                 data-testid="student-login-btn"
@@ -109,8 +109,8 @@ const StudentLoginPage = () => {
             </div>
 
             <div className="mt-4 pt-4 border-t border-slate-200 text-center">
-              <Link 
-                to="/admin/login" 
+              <Link
+                to="/admin/login"
                 className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
               >
                 Admin Login →
