@@ -6,11 +6,16 @@
     min-height: 100vh;
     background-color: var(--academic-slate);
     color: white;
-    transition: width 0.3s ease;
+    flex-shrink: 0;
 }
 
-.sidebar-collapsed {
-    width: 70px;
+/* On mobile the sidebar is fixed/overlay — handled by Tailwind classes in the component.
+   On desktop (lg+) it remains a static flex child at 260px. */
+@media (max-width: 1023px) {
+    .sidebar {
+        min-height: 100vh;
+        height: 100vh;
+    }
 }
 
 .sidebar-link {

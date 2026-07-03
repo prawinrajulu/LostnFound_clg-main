@@ -99,11 +99,11 @@ const StudentDashboard = () => {
   return (
     <div className="space-y-8 animate-fade-in" data-testid="student-dashboard">
       {/* Welcome Section */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h1 className="font-outfit text-2xl font-bold text-slate-900 mb-2">
+      <div className="bg-white rounded-lg border border-slate-200 p-4 sm:p-6">
+        <h1 className="font-outfit text-xl sm:text-2xl font-bold text-slate-900 mb-1">
           Welcome back, {user?.full_name?.split(' ')[0] || 'Student'}!
         </h1>
-        <p className="text-slate-500">
+        <p className="text-sm sm:text-base text-slate-500 break-all sm:break-normal">
           {user?.department} • {user?.year} Year • {user?.roll_number}
         </p>
       </div>
@@ -199,8 +199,8 @@ const StudentDashboard = () => {
                   className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3 animate-fade-in"
                   data-testid={`match-verify-${match.id}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Badge className="bg-emerald-50 text-emerald-700">
                         {match.confidence_score}% Match
                       </Badge>
@@ -289,28 +289,30 @@ const StudentDashboard = () => {
                   className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-3 animate-fade-in"
                   data-testid={`claim-${claim.id}`}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-start gap-3">
                     {claim.item?.image_url && (
                       <img 
                         src={`${process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com'}${claim.item.image_url}`}
                         alt=""
-                        className="w-16 h-16 rounded-lg object-cover"
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0"
                         onError={(e) => {
                           e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
                         }}
                       />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">
-                        {claim.item?.description || 'Item'}
-                      </p>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-900 truncate">
+                          {claim.item?.description || 'Item'}
+                        </p>
+                        <Badge className={getClaimStatusColor(claim.status)}>
+                          {claim.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-slate-500 mt-1">
                         Claimed on {new Date(claim.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <Badge className={getClaimStatusColor(claim.status)}>
-                      {claim.status.replace('_', ' ')}
-                    </Badge>
                   </div>
                   
                   {/* Verification Questions Section */}

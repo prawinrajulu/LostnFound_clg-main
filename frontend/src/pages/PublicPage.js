@@ -154,7 +154,7 @@ const PublicPage = () => {
 
       {/* Items Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
             <h2 className="font-outfit text-2xl font-bold text-slate-900">
               Recent Lost &amp; Found Items
@@ -165,7 +165,7 @@ const PublicPage = () => {
           </div>
           <Button
             onClick={() => navigate('/student/login')}
-            className="bg-slate-900 hover:bg-slate-800"
+            className="bg-slate-900 hover:bg-slate-800 w-full sm:w-auto"
             data-testid="login-to-claim-btn"
           >
             Login to Report / Claim

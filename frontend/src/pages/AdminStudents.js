@@ -192,79 +192,81 @@ const AdminStudents = () => {
               <p className="text-sm text-slate-400 mt-1">Upload an Excel file to add students</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Roll Number</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredStudents.map((student) => (
-                  <TableRow key={student.id} className="table-row-hover" data-testid={`student-row-${student.id}`}>
-                    <TableCell className="mono font-medium">{student.roll_number}</TableCell>
-                    <TableCell>{student.full_name}</TableCell>
-                    <TableCell>{student.department}</TableCell>
-                    <TableCell>{student.year}</TableCell>
-                    <TableCell className="text-sm">{student.email}</TableCell>
-                    <TableCell className="text-sm mono">{student.phone_number}</TableCell>
-                    <TableCell>
-                      {student.admin_notes?.length > 0 && (
-                        <Badge variant="secondary">
-                          {student.admin_notes.length} note(s)
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedStudent(student)}
-                          data-testid={`view-student-${student.id}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenEdit(student)}
-                          data-testid={`edit-student-${student.id}`}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setNoteStudent(student);
-                            setShowNoteDialog(true);
-                          }}
-                          data-testid={`add-note-${student.id}`}
-                        >
-                          <StickyNote className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteStudent(student.id)}
-                          className="text-red-600 hover:text-red-700"
-                          data-testid={`delete-student-${student.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[800px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Roll Number</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudents.map((student) => (
+                    <TableRow key={student.id} className="table-row-hover" data-testid={`student-row-${student.id}`}>
+                      <TableCell className="mono font-medium">{student.roll_number}</TableCell>
+                      <TableCell>{student.full_name}</TableCell>
+                      <TableCell>{student.department}</TableCell>
+                      <TableCell>{student.year}</TableCell>
+                      <TableCell className="text-sm">{student.email}</TableCell>
+                      <TableCell className="text-sm mono">{student.phone_number}</TableCell>
+                      <TableCell>
+                        {student.admin_notes?.length > 0 && (
+                          <Badge variant="secondary">
+                            {student.admin_notes.length} note(s)
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedStudent(student)}
+                            data-testid={`view-student-${student.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenEdit(student)}
+                            data-testid={`edit-student-${student.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setNoteStudent(student);
+                              setShowNoteDialog(true);
+                            }}
+                            data-testid={`add-note-${student.id}`}
+                          >
+                            <StickyNote className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteStudent(student.id)}
+                            className="text-red-600 hover:text-red-700"
+                            data-testid={`delete-student-${student.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

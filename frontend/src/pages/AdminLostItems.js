@@ -116,85 +116,87 @@ const AdminLostItems = () => {
               <p className="text-slate-500">No lost items found</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Image</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredItems.map((item) => (
-                  <TableRow key={item.id} className="table-row-hover" data-testid={`item-row-${item.id}`}>
-                    <TableCell>
-                      <img
-                        src={item.image_url ? `${BACKEND_URL}${item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
-                        alt=""
-                        className="w-12 h-12 rounded-lg object-cover"
-                        onError={(e) => {
-                          e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="max-w-xs">
-                      <p className="truncate">{item.description}</p>
-                    </TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-1 text-sm">
-                        <MapPin className="w-3 h-3" />
-                        {item.location}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-1 text-sm mono">
-                        <Calendar className="w-3 h-3" />
-                        {item.date}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {item.student && (
-                        <div>
-                          <p className="text-sm font-medium">{item.student.full_name}</p>
-                          <p className="text-xs text-slate-500 mono">{item.student.roll_number}</p>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(item.status)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedItem(item)}
-                          data-testid={`view-item-${item.id}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        {item.status === 'active' && (
+            <div className="overflow-x-auto">
+              <Table className="min-w-[700px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Image</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredItems.map((item) => (
+                    <TableRow key={item.id} className="table-row-hover" data-testid={`item-row-${item.id}`}>
+                      <TableCell>
+                        <img
+                          src={item.image_url ? `${BACKEND_URL}${item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
+                          alt=""
+                          className="w-12 h-12 rounded-lg object-cover"
+                          onError={(e) => {
+                            e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="max-w-xs">
+                        <p className="truncate">{item.description}</p>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1 text-sm">
+                          <MapPin className="w-3 h-3" />
+                          {item.location}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1 text-sm mono">
+                          <Calendar className="w-3 h-3" />
+                          {item.date}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {item.student && (
+                          <div>
+                            <p className="text-sm font-medium">{item.student.full_name}</p>
+                            <p className="text-xs text-slate-500 mono">{item.student.roll_number}</p>
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(item.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                              setItemToDelete(item);
-                              setShowDeleteDialog(true);
-                            }}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            data-testid={`delete-item-${item.id}`}
+                            onClick={() => setSelectedItem(item)}
+                            data-testid={`view-item-${item.id}`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Eye className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          {item.status === 'active' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setItemToDelete(item);
+                                setShowDeleteDialog(true);
+                              }}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              data-testid={`delete-item-${item.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
