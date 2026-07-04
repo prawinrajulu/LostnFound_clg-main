@@ -62,6 +62,7 @@ const AdminLoginPage = () => {
                   placeholder="Enter your username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="off"
                   data-testid="admin-username-input"
                 />
               </div>
@@ -76,6 +77,7 @@ const AdminLoginPage = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pr-10"
+                    autoComplete="off"
                     data-testid="admin-password-input"
                   />
                   <button

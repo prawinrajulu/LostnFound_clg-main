@@ -454,16 +454,6 @@ async def admin_login(data: AdminLogin):
     is_valid = verify_password(data.password, admin.get("password", ""))
     logging.info(f"Password verification (bcrypt) result: {is_valid}")
 
-    # Robust fallback check for seeded admin accounts (handles database seed inconsistencies)
-    if not is_valid:
-        matched_username_lower = (admin.get("username") or "").lower()
-        if matched_username_lower == "superadmin" and data.password in ["#123321#", "admin123", "SuperAdmin@123"]:
-            is_valid = True
-            logging.info("Password verified via superadmin fallback match")
-        elif matched_username_lower == "admin" and data.password in ["admin@123"]:
-            is_valid = True
-            logging.info("Password verified via default admin fallback match")
-
     if not is_valid:
         logging.warning(f"Password verification failed for: '{username_clean}'")
         raise HTTPException(status_code=401, detail="Invalid credentials")
