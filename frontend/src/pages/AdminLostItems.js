@@ -23,6 +23,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import { Search, Eye, MapPin, Calendar, Trash2 } from 'lucide-react';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
@@ -134,11 +135,11 @@ const AdminLostItems = () => {
                     <TableRow key={item.id} className="table-row-hover" data-testid={`item-row-${item.id}`}>
                       <TableCell>
                         <img
-                          src={item.image_url ? `${BACKEND_URL}${item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
+                          src={item.image_url ? `${BACKEND_URL}${item.image_url}` : NO_IMAGE_PLACEHOLDER}
                           alt=""
                           className="w-12 h-12 rounded-lg object-cover"
                           onError={(e) => {
-                            e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                            e.target.src = NO_IMAGE_PLACEHOLDER;
                           }}
                         />
                       </TableCell>
@@ -210,11 +211,11 @@ const AdminLostItems = () => {
           {selectedItem && (
             <div className="space-y-4">
               <img
-                src={selectedItem.image_url ? `${BACKEND_URL}${selectedItem.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400'}
+                src={selectedItem.image_url ? `${BACKEND_URL}${selectedItem.image_url}` : NO_IMAGE_PLACEHOLDER}
                 alt=""
                 className="w-full max-h-64 object-cover rounded-lg"
                 onError={(e) => {
-                  e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400';
+                  e.target.src = NO_IMAGE_PLACEHOLDER;
                 }}
               />
               <div className="grid grid-cols-2 gap-4">

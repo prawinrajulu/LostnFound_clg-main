@@ -25,6 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import { ClipboardList, Eye, CheckCircle, XCircle, MessageSquare, HelpCircle } from 'lucide-react';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -153,7 +154,7 @@ const AdminClaims = () => {
                                 alt=""
                                 className="w-10 h-10 rounded-lg object-cover"
                                 onError={(e) => {
-                                  e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                                  e.target.src = NO_IMAGE_PLACEHOLDER;
                                 }}
                               />
                             )}
@@ -244,7 +245,7 @@ const AdminClaims = () => {
                     alt=""
                     className="w-24 h-24 rounded-lg object-cover"
                     onError={(e) => {
-                      e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                      e.target.src = NO_IMAGE_PLACEHOLDER;
                     }}
                   />
                 )}

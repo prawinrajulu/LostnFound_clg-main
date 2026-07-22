@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query, Request
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from postgrest.types import CountMethod
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -184,11 +185,26 @@ async def sb_count_in(table: str, filters: dict, in_col: str, in_vals: list) -> 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await _seed_accounts()
+    try:
+        await _seed_accounts()
+    except Exception as e:
+        import traceback
+        logging.error(f"Startup account seeding error: {e}")
+        traceback.print_exc()
     yield
 
 
 app = FastAPI(title="Campus Lost & Found API", lifespan=lifespan)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    logging.error(f"Unhandled Exception on {request.url.path}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "error_type": type(exc).__name__}
+    )
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -1029,16 +1045,22 @@ async def get_my_items(current_user: dict = Depends(require_student)):
 @api_router.get("/items/public")
 async def get_public_items():
     """Public endpoint — shows recently lost and found items without sensitive data."""
-    def _q():
-        resp = (supabase.table("items")
-                .select("id,item_type,description,location,image_url,status,created_at,created_date,created_time,likes,dislikes")
-                .eq("is_deleted", False)
-                .eq("status", "active")
-                .order("created_at", desc=True)
-                .limit(50)
-                .execute())
-        return resp.data or []
-    return await run(_q)
+    try:
+        def _q():
+            resp = (supabase.table("items")
+                    .select("id,item_type,description,location,image_url,status,created_at,created_date,created_time,likes,dislikes")
+                    .eq("is_deleted", False)
+                    .eq("status", "active")
+                    .order("created_at", desc=True)
+                    .limit(50)
+                    .execute())
+            return resp.data or []
+        return await run(_q)
+    except Exception as e:
+        import traceback
+        logging.error(f"Error in GET /api/items/public: {e}")
+        traceback.print_exc()
+        return []
 
 
 @api_router.get("/items/deleted/all")
@@ -2195,11 +2217,13 @@ async def get_stats(current_user: dict = Depends(require_admin)):
 
 # ===================== HEALTH CHECK =====================
 
+@app.get("/")
 @api_router.get("/")
 async def root():
     return {"message": "Campus Lost & Found API", "status": "running"}
 
 
+@app.get("/health")
 @api_router.get("/health")
 async def health():
     return {"status": "healthy"}
@@ -2209,21 +2233,28 @@ async def health():
 # NOTE: Middleware must be added BEFORE include_router so CORS headers are
 # present on ALL responses, including error responses from endpoints.
 # ---------------------------------------------------------------------------
-# Build CORS origins list:
-# 1. Read CORS_ORIGINS env var (comma-separated), stripping whitespace from each entry.
-# 2. Always add the Vercel frontend URL from FRONTEND_URL env var if set.
-# 3. Always include localhost for local development.
 _raw_cors = os.environ.get('CORS_ORIGINS', '')
-_cors_list = [o.strip() for o in _raw_cors.split(',') if o.strip()] if _raw_cors else []
-_frontend_url = os.environ.get('FRONTEND_URL', '').strip()
+_cors_list = [o.strip().rstrip('/') for o in _raw_cors.split(',') if o.strip()] if _raw_cors else []
+_frontend_url = os.environ.get('FRONTEND_URL', '').strip().rstrip('/')
 if _frontend_url and _frontend_url not in _cors_list:
     _cors_list.append(_frontend_url)
-for _dev_origin in ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000']:
+
+_default_origins = [
+    'https://lostn-found-clg-main.vercel.app',
+    'https://lostnfound-clg-main.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3001'
+]
+for _dev_origin in _default_origins:
     if _dev_origin not in _cors_list:
         _cors_list.append(_dev_origin)
-# If still empty, fall back to allow all (unsafe for production — set CORS_ORIGINS on Render)
-if not _cors_list:
-    _cors_list = ['*']
+
+_cors_list = [o for o in _cors_list if o != '*']
+
 print(f"CORS allowed origins: {_cors_list}")
 
 app.add_middleware(

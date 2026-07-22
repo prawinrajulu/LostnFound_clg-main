@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { Sparkles, RefreshCw, ArrowRight, MapPin, Calendar, Shield } from 'lucide-react';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
@@ -161,11 +162,11 @@ const AdminAIMatches = () => {
                     <Badge className="status-lost mb-3">LOST</Badge>
                     <div className="flex gap-3">
                       <img
-                        src={match.lost_item?.image_url ? `${BACKEND_URL}${match.lost_item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
+                        src={match.lost_item?.image_url ? `${BACKEND_URL}${match.lost_item.image_url}` : NO_IMAGE_PLACEHOLDER}
                         alt=""
                         className="w-20 h-20 rounded-lg object-cover"
                         onError={(e) => {
-                          e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                          e.target.src = NO_IMAGE_PLACEHOLDER;
                         }}
                       />
                       <div className="flex-1 min-w-0">
@@ -203,11 +204,11 @@ const AdminAIMatches = () => {
                     <Badge className="status-found mb-3">FOUND</Badge>
                     <div className="flex gap-3">
                       <img
-                        src={match.found_item?.image_url ? `${BACKEND_URL}${match.found_item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
+                        src={match.found_item?.image_url ? `${BACKEND_URL}${match.found_item.image_url}` : NO_IMAGE_PLACEHOLDER}
                         alt=""
                         className="w-20 h-20 rounded-lg object-cover"
                         onError={(e) => {
-                          e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                          e.target.src = NO_IMAGE_PLACEHOLDER;
                         }}
                       />
                       <div className="flex-1 min-w-0">

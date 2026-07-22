@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { PublicHeader } from '../components/Header';
 import { itemsAPI } from '../services/api';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -127,11 +128,11 @@ const PublicPage = () => {
               >
                 <div className="relative">
                   <img
-                    src={item.image_url ? `${BACKEND_URL}${item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400'}
+                    src={item.image_url ? `${BACKEND_URL}${item.image_url}` : NO_IMAGE_PLACEHOLDER}
                     alt={item.description}
                     className="item-card-image"
                     onError={(e) => {
-                      e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400';
+                      e.target.src = NO_IMAGE_PLACEHOLDER;
                     }}
                   />
                   <Badge className="absolute top-3 left-3 status-found">

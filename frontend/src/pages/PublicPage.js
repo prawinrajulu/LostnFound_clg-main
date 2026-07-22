@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/badge';
 import { PublicHeader } from '../components/Header';
 import { itemsAPI } from '../services/api';
 import bgimg from '../assets/bgimg.jpg';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
@@ -82,9 +83,7 @@ const PublicPage = () => {
    * - If null/undefined, return the fallback placeholder.
    */
   const getImageSrc = (image_url) => {
-    const FALLBACK =
-      'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400';
-    if (!image_url) return FALLBACK;
+    if (!image_url) return NO_IMAGE_PLACEHOLDER;
     if (image_url.startsWith('http://') || image_url.startsWith('https://')) {
       return image_url;
     }
@@ -209,8 +208,7 @@ const PublicPage = () => {
                     className="item-card-image"
                     onError={(e) => {
                       e.target.onerror = null; // prevent infinite fallback loop
-                      e.target.src =
-                        'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=400';
+                      e.target.src = NO_IMAGE_PLACEHOLDER;
                     }}
                   />
                   <Badge

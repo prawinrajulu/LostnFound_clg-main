@@ -6,8 +6,9 @@ import { ItemGrid } from '../components/ItemCard';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Search, Package, Plus, CheckCircle2, Shield } from 'lucide-react';
+import { PlusCircle, Search, Clock, ShieldCheck, CheckCircle2, ChevronRight, Inbox, Sparkles, MessageSquare, Package, Shield, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -296,7 +297,7 @@ const StudentDashboard = () => {
                         alt=""
                         className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0"
                         onError={(e) => {
-                          e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                          e.target.src = NO_IMAGE_PLACEHOLDER;
                         }}
                       />
                     )}

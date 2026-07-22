@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { Shield, ArrowRight, RefreshCw, MessageSquare, MapPin, Calendar } from 'lucide-react';
+import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 
@@ -146,11 +147,11 @@ const AdminVerificationQueue = () => {
                     </div>
                     <div className="flex gap-4">
                       <img
-                        src={item.lost_item?.image_url ? `${BACKEND_URL}${item.lost_item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
+                        src={item.lost_item?.image_url ? `${BACKEND_URL}${item.lost_item.image_url}` : NO_IMAGE_PLACEHOLDER}
                         alt=""
                         className="w-16 h-16 rounded-lg object-cover"
                         onError={(e) => {
-                          e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                          e.target.src = NO_IMAGE_PLACEHOLDER;
                         }}
                       />
                       <div className="flex-1 min-w-0">
@@ -180,11 +181,11 @@ const AdminVerificationQueue = () => {
                     </div>
                     <div className="flex gap-4">
                       <img
-                        src={item.found_item?.image_url ? `${BACKEND_URL}${item.found_item.image_url}` : 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100'}
+                        src={item.found_item?.image_url ? `${BACKEND_URL}${item.found_item.image_url}` : NO_IMAGE_PLACEHOLDER}
                         alt=""
                         className="w-16 h-16 rounded-lg object-cover"
                         onError={(e) => {
-                          e.target.src = 'https://images.pexels.com/photos/3731256/pexels-photo-3731256.jpeg?auto=compress&cs=tinysrgb&w=100';
+                          e.target.src = NO_IMAGE_PLACEHOLDER;
                         }}
                       />
                       <div className="flex-1 min-w-0">
