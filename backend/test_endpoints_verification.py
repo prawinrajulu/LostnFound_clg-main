@@ -1,4 +1,5 @@
 import urllib.request
+import urllib.error
 import json
 
 base_url = "http://127.0.0.1:8010"

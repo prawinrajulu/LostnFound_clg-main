@@ -33,8 +33,13 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data.user);
       setRole(response.data.role);
     } catch (error) {
-      console.error('Auth error:', error);
-      localStorage.removeItem('token');
+      if (error.response && error.response.status === 401) {
+        // Expired or invalid token stored locally; clear without throwing console error
+        localStorage.removeItem('token');
+      } else {
+        console.error('Auth check failed:', error.message || error);
+        localStorage.removeItem('token');
+      }
       setToken(null);
       setUser(null);
       setRole(null);
