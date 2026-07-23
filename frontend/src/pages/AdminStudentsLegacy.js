@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { studentsAPI } from '../services/api';
+import { studentsAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -68,7 +68,7 @@ const AdminStudentsLegacy = () => {
       fetchStudents();
       setShowUploadDialog(false);
     } catch (error) {
-      const message = error.response?.data?.detail || 'Upload failed';
+      const message = getErrorMessage(error, 'Upload failed');
       toast.error(message);
     } finally {
       setUploading(false);

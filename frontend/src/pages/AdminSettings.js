@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI } from '../services/api';
+import { adminAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -43,7 +43,7 @@ const AdminSettings = () => {
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to change password';
+      const message = getErrorMessage(error, 'Failed to change password');
       toast.error(message);
     } finally {
       setChanging(false);

@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { toast } from 'sonner';
 import { Shield, Eye, EyeOff } from 'lucide-react';
 
+import { getErrorMessage } from '../services/api';
+
 const AdminLoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +32,7 @@ const AdminLoginPage = () => {
       toast.success('Login successful!');
       navigate('/admin');
     } catch (error) {
-      const message = error.response?.data?.detail || error.message || 'Login failed. Please try again.';
+      const message = getErrorMessage(error, 'Login failed. Please try again.');
       toast.error(message);
     } finally {
       setLoading(false);

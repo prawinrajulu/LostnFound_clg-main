@@ -40,6 +40,7 @@ class StudentDatabaseTester:
         if files:
             default_headers.pop('Content-Type', None)
         
+        response = None
         try:
             if method == 'GET':
                 response = requests.get(url, headers=default_headers)
@@ -48,8 +49,12 @@ class StudentDatabaseTester:
                     response = requests.post(url, files=files, headers=default_headers)
                 else:
                     response = requests.post(url, json=data, headers=default_headers)
+            elif method == 'PUT':
+                response = requests.put(url, json=data, headers=default_headers)
             elif method == 'DELETE':
                 response = requests.delete(url, headers=default_headers)
+            else:
+                response = requests.request(method, url, json=data, headers=default_headers)
             
             return response
         except Exception as e:

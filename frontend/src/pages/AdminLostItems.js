@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { itemsAPI } from '../services/api';
+import { itemsAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -53,7 +53,7 @@ const AdminLostItems = () => {
       fetchItems();
     } catch (error) {
       console.error('Failed to delete item:', error);
-      toast.error(error.response?.data?.detail || 'Failed to delete item');
+      toast.error(getErrorMessage(error, 'Failed to delete item'));
     } finally {
       setDeleting(false);
     }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { itemsAPI } from '../services/api';
+import { itemsAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -57,7 +57,7 @@ const ReportFoundPage = () => {
       toast.success('Found item reported successfully! Thank you for helping.');
       navigate('/student/my-items');
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to report item';
+      const message = getErrorMessage(error, 'Failed to report item');
       toast.error(message);
     } finally {
       setLoading(false);

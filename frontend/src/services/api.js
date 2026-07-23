@@ -4,6 +4,49 @@ import axios from 'axios';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
 const API = `${BACKEND_URL}/api`;
 
+/**
+ * Safely extracts a string error message from any error object.
+ * Handles Pydantic validation arrays/objects, response messages, and fallback text.
+ */
+export const getErrorMessage = (error, fallback = 'An unexpected error occurred') => {
+  if (!error) return fallback;
+  
+  const detail = error?.response?.data?.detail;
+  
+  if (typeof detail === 'string') {
+    return detail;
+  }
+  
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && item.msg) return item.msg;
+        if (item && typeof item === 'object') return JSON.stringify(item);
+        return String(item);
+      })
+      .filter(Boolean)
+      .join(', ') || fallback;
+  }
+  
+  if (detail && typeof detail === 'object') {
+    if (detail.msg) return String(detail.msg);
+    if (detail.message) return String(detail.message);
+    return JSON.stringify(detail);
+  }
+  
+  const message = error?.response?.data?.message;
+  if (typeof message === 'string') return message;
+  
+  if (typeof error.message === 'string' && error.message) {
+    return error.message;
+  }
+  
+  if (typeof error === 'string') return error;
+  
+  return fallback;
+};
+
 // Create axios instance with auth header
 const createAuthAxios = () => {
   const instance = axios.create({
@@ -24,6 +67,9 @@ const createAuthAxios = () => {
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         window.location.href = '/';
+      }
+      if (error.response?.data?.detail) {
+        error.response.data.detail = getErrorMessage(error);
       }
       return Promise.reject(error);
     }
@@ -90,7 +136,14 @@ export const itemsAPI = {
 export const claimsAPI = {
   getClaims: (params) => api.get('/claims', { params }),
   getClaim: (id) => api.get(`/claims/${id}`),
-  createClaim: (itemId, message) => api.post('/claims', { item_id: itemId, message }),
+  createClaim: (itemId, message) => {
+    if (typeof itemId === 'object' && itemId !== null) {
+      const id = itemId.item_id || itemId.itemId || itemId.id;
+      const msg = itemId.message || itemId.details || message || '';
+      return api.post('/claims', { item_id: id, message: msg });
+    }
+    return api.post('/claims', { item_id: itemId, message: message || '' });
+  },
   addVerificationQuestion: (claimId, question) =>
     api.post(`/claims/${claimId}/verification-question`, { claim_id: claimId, question }),
   answerVerification: (claimId, answer) =>

@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { toast } from 'sonner';
 import { GraduationCap, Calendar } from 'lucide-react';
 
+import { getErrorMessage } from '../services/api';
+
 const StudentLoginPage = () => {
   const [rollNumber, setRollNumber] = useState('');
   const [dob, setDob] = useState('');
@@ -33,7 +35,7 @@ const StudentLoginPage = () => {
       toast.success('Login successful!');
       navigate('/student');
     } catch (error) {
-      const message = error.response?.data?.detail || error.message || 'Login failed. Please try again.';
+      const message = getErrorMessage(error, 'Login failed. Please try again.');
       toast.error(message);
     } finally {
       setLoading(false);

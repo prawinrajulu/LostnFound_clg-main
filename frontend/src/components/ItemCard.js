@@ -14,7 +14,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { toast } from 'sonner';
-import { claimsAPI } from '../services/api';
+import { claimsAPI, getErrorMessage } from '../services/api';
 import { NO_IMAGE_PLACEHOLDER } from '../lib/utils';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://lostnfound-clg-main.onrender.com';
@@ -56,17 +56,14 @@ export const ItemCard = ({
     
     setClaiming(true);
     try {
-      await claimsAPI.createClaim({
-        item_id: item.id,
-        details: claimDetails
-      });
+      await claimsAPI.createClaim(item.id, claimDetails);
       toast.success('Claim submitted successfully!');
       setShowClaimDialog(false);
       setClaimDetails('');
       if (onUpdate) await onUpdate();
     } catch (error) {
       console.error('Claim failed:', error);
-      toast.error(error.response?.data?.detail || 'Failed to submit claim');
+      toast.error(getErrorMessage(error, 'Failed to submit claim'));
     } finally {
       setClaiming(false);
     }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { studentsAPI } from '../services/api';
+import { studentsAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -74,7 +74,7 @@ const AdminStudents = () => {
       setShowEditDialog(false);
       fetchStudents();
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to update student';
+      const message = getErrorMessage(error, 'Failed to update student');
       toast.error(message);
     }
   };
@@ -111,7 +111,7 @@ const AdminStudents = () => {
       fetchStudents();
       setShowUploadDialog(false);
     } catch (error) {
-      const message = error.response?.data?.detail || 'Upload failed';
+      const message = getErrorMessage(error, 'Upload failed');
       toast.error(message);
     } finally {
       setUploading(false);

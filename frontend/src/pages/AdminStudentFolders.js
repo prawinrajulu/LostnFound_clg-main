@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { studentsAPI } from '../services/api';
+import { studentsAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -272,7 +272,7 @@ const AdminStudentFolders = () => {
       setUploadFile(null);
       setUploadStep(1);
     } catch (error) {
-      const message = error.response?.data?.detail || 'Upload failed';
+      const message = getErrorMessage(error, 'Upload failed');
       toast.error(message);
     } finally {
       setUploading(false);
@@ -312,7 +312,7 @@ const AdminStudentFolders = () => {
         fetchFolderStudents(selectedDept, selectedYear);
       }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete student';
+      const message = getErrorMessage(error, 'Failed to delete student');
       toast.error(message);
     }
   };
@@ -364,7 +364,7 @@ const AdminStudentFolders = () => {
         fetchFolderStudents(selectedDept, selectedYear);
       }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete students';
+      const message = getErrorMessage(error, 'Failed to delete students');
       toast.error(message);
     }
   };
@@ -401,7 +401,7 @@ const AdminStudentFolders = () => {
         fetchFolderStudents(selectedDept, selectedYear);
       }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to update student';
+      const message = getErrorMessage(error, 'Failed to update student');
       toast.error(message);
     } finally {
       setEditSaving(false);
@@ -446,7 +446,7 @@ const AdminStudentFolders = () => {
         if (selectedYear === renamingYear) setSelectedYear(renameNewYear.trim());
       }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to rename folder';
+      const message = getErrorMessage(error, 'Failed to rename folder');
       toast.error(message);
     } finally {
       setRenameSaving(false);

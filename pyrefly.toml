@@ -1,16 +1,18 @@
-[python]
-interpreter = "backend/venv/Scripts/python.exe"
-site_package_path = ["backend/venv/Lib/site-packages"]
-
-[project]
-include = ["backend", "emergency_admin_reset.py", "backend_test.py"]
-exclude = [
+python-interpreter-path = "C:/Python313/python.exe"
+site-package-path = [
+  "C:/Python313/Lib/site-packages",
+  "backend/venv/Lib/site-packages"
+]
+search-path = ["backend", "."]
+project-includes = [
+  "backend",
+  "emergency_admin_reset.py",
+  "backend_test.py"
+]
+project-excludes = [
   "backend/venv",
   "backend/__pycache__",
   "SPCET-LF-main",
   "frontend",
-  "tests",
+  "tests"
 ]
-
-[errors]
-missing_module_source = "warning"

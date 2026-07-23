@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { adminAPI } from '../services/api';
+import { adminAPI, getErrorMessage } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -66,7 +66,7 @@ const AdminManageAdmins = () => {
       setNewAdmin({ username: '', password: '', fullName: '' });
       fetchAdmins();
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to create admin';
+      const message = getErrorMessage(error, 'Failed to create admin');
       toast.error(message);
     } finally {
       setAdding(false);
@@ -81,7 +81,7 @@ const AdminManageAdmins = () => {
       toast.success('Admin deleted');
       fetchAdmins();
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete admin';
+      const message = getErrorMessage(error, 'Failed to delete admin');
       toast.error(message);
     }
   };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { verificationAPI } from '../services/api';
+import { verificationAPI, getErrorMessage } from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -82,7 +82,7 @@ const AdminVerificationSession = () => {
       toast.success('Item successfully returned and match completed!');
       navigate('/admin/verification-queue');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to complete match');
+      toast.error(getErrorMessage(error, 'Failed to complete match'));
     }
   };
 

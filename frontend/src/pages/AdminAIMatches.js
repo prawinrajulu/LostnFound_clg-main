@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { aiAPI } from '../services/api';
+import { aiAPI, getErrorMessage } from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -65,7 +65,7 @@ const AdminAIMatches = () => {
       fetchMatches();
     } catch (error) {
       console.error('Failed to send verification:', error);
-      toast.error(error.response?.data?.detail || 'Failed to send verification question');
+      toast.error(getErrorMessage(error, 'Failed to send verification question'));
     } finally {
       setSubmitting(false);
     }
