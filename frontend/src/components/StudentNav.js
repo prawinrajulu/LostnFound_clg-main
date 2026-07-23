@@ -11,9 +11,17 @@ const navItems = [
 ];
 
 export const StudentMobileNav = () => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <nav className="mobile-nav md:hidden" data-testid="student-mobile-nav">
-      <div className="flex justify-around">
+      <div className="flex justify-around items-center">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -28,6 +36,14 @@ export const StudentMobileNav = () => {
             <span>{item.label}</span>
           </NavLink>
         ))}
+        <button
+          onClick={handleLogout}
+          className="mobile-nav-item text-slate-500 hover:text-red-600 transition-colors"
+          data-testid="mobile-logout-btn"
+        >
+          <LogOut className="w-5 h-5 mb-1" />
+          <span>Logout</span>
+        </button>
       </div>
     </nav>
   );

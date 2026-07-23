@@ -1,5 +1,6 @@
-import { Link } from 'react-router-dom';
-import { Building2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Building2, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const CollegeLogo = ({ className = '' }) => {
   return (
@@ -50,6 +51,14 @@ export const PublicHeader = () => {
 };
 
 export const StudentHeader = ({ user, unreadCount = 0 }) => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 glass">
       <div className="px-4 sm:px-6 lg:px-8">
@@ -57,7 +66,7 @@ export const StudentHeader = ({ user, unreadCount = 0 }) => {
           <Link to="/student" className="flex items-center">
             <CollegeLogo />
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Link 
               to="/student/notifications" 
               className="relative p-2 text-slate-600 hover:text-slate-900"
@@ -88,6 +97,14 @@ export const StudentHeader = ({ user, unreadCount = 0 }) => {
                 {user?.full_name || 'Student'}
               </span>
             </Link>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 p-2 text-slate-600 hover:text-red-600 hover:bg-slate-100 rounded-md transition-colors"
+              title="Logout"
+              data-testid="header-logout-btn"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>
